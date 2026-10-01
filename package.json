@@ -1,0 +1,47 @@
+{
+  "name": "avito-automatization",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "pnpm build:packages && pnpm --filter './apps/*' build",
+    "build:packages": "pnpm --filter './packages/*' build",
+    "clean": "pnpm -r clean",
+    "dev": "pnpm build:packages && concurrently -n api,worker,mini-app -c blue,magenta,green 'pnpm --filter @avito/backend dev:api' 'pnpm --filter @avito/backend dev:worker' 'pnpm --filter @avito/mini-app dev'",
+    "dev:api": "pnpm build:packages && pnpm --filter @avito/backend dev:api",
+    "dev:worker": "pnpm build:packages && pnpm --filter @avito/backend dev:worker",
+    "dev:mini-app": "pnpm --filter @avito/mini-app dev",
+    "db:generate": "pnpm --filter @avito/database db:generate",
+    "db:migrate": "pnpm --filter @avito/database db:migrate",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "typecheck": "pnpm -r typecheck",
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.55.1",
+    "@types/node": "^24.6.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.5.1",
+    "globals": "^16.4.0",
+    "prettier": "^3.6.2",
+    "testcontainers": "^11.7.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.44.1",
+    "vue-eslint-parser": "^10.2.0",
+    "vitest": "^3.2.4"
+  }
+}

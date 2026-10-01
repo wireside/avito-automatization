@@ -8,7 +8,7 @@ Core constraints:
 
 - Build a Telegram Mini App and custom backend for Avito order processing, local inventory, DataMatrix workflows, returns, team operations, preliminary finance, and analytics.
 - Keep a TypeScript modular monolith in one pnpm workspace with separate API and worker processes.
-- Use Fastify, Telegraf, React/Vite, PostgreSQL, Drizzle ORM/Kit, Redis, BullMQ, Zod, Pino, Vitest, Testcontainers, and Playwright.
+- Use Fastify, Telegraf, Vue 3/Vite, TanStack Query for Vue, PostgreSQL, Drizzle ORM/Kit, Redis, BullMQ, Zod, Pino, Vitest, Testcontainers, and Playwright. Add Pinia only when complex client-owned state appears; do not duplicate server state there.
 - Treat PostgreSQL as the source of truth for catalog, variants, warehouses, receipts, cost layers, reservations, inventory movements, product units, returns, shifts, and durable operations.
 - Treat Avito as the source of truth for orders, delivery, available actions, accepted marketplace markings, and only the financial facts its API or reports actually provide.
 - Treat Chestny ZNAK as the source of truth for the legal state of each CIS.

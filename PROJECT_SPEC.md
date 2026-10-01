@@ -286,7 +286,8 @@ CHZ_SUBMISSION_MODE=DIRECT_TRUE_API
 - pnpm workspace, модульный монолит.
 - Fastify для HTTP API и Telegram webhook.
 - Telegraf как тонкий backend-адаптер.
-- React + Vite для Mini App.
+- Vue 3 + Vite для Mini App.
+- TanStack Query for Vue для серверного состояния и кэширования API; Pinia добавляется только при появлении сложного клиентского состояния, которое не принадлежит серверу.
 - PostgreSQL, Drizzle ORM/Kit, `node-postgres`.
 - Redis + BullMQ для retries, rate limiting и фонового исполнения.
 - Zod для конфигурации и DTO.
@@ -298,7 +299,7 @@ CHZ_SUBMISSION_MODE=DIRECT_TRUE_API
 ```text
 apps/
   backend/             Fastify/Telegraf; entrypoints API и worker
-  mini-app/            React/Vite
+  mini-app/            Vue 3/Vite/TanStack Query
   local-signer/        только для DIRECT_TRUE_API
 packages/
   domain/              состояния, правила, use cases
@@ -311,7 +312,7 @@ docs/
   api-fixtures/
 ```
 
-API и worker запускаются отдельно из одного backend-пакета. Бизнес-логика не размещается в Telegram handlers или React-компонентах.
+API и worker запускаются отдельно из одного backend-пакета. Бизнес-логика не размещается в Telegram handlers или Vue-компонентах.
 
 ## 11. Данные PostgreSQL
 

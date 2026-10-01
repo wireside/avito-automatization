@@ -1,0 +1,23 @@
+{
+  "name": "@avito/mini-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vue-tsc --noEmit && vite build",
+    "clean": "rm -rf dist",
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@zxing/browser": "^0.1.5",
+    "@tanstack/vue-query": "^5.90.2",
+    "vue": "^3.5.22"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^7.1.7",
+    "vue-tsc": "^3.1.1"
+  }
+}
