@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+
+# Raw integration evidence may contain credentials, CIS values, or personal data.
+docs/api-fixtures/raw/
+docs/integration-evidence/raw/
+
+# Private signing material must never enter the repository.
+*.key
+*.pem
+*.p12
+*.pfx

@@ -1,0 +1,42 @@
+{
+  "provider": "avito",
+  "source": "https://www.avito.ru/developers/api-catalog",
+  "capturedAt": "2026-10-01",
+  "contracts": [
+    {
+      "file": "auth.openapi.json",
+      "title": "Авторизация",
+      "version": "1",
+      "sha256": "bfd91c70c45d1b3a741637db7f7f3a847828a2f0f04b59b850a3b1cdbc0b36ac",
+      "purpose": ["oauth"]
+    },
+    {
+      "file": "order-management.openapi.json",
+      "title": "Управление заказами",
+      "version": "1.0.0",
+      "sha256": "faeabf08783552b08b054424c8cf733503ffb5a5a1aa6d4dd6bed5be9d646c0d",
+      "purpose": ["orders", "delivery-status", "returns", "markings", "labels"]
+    },
+    {
+      "file": "items.openapi.json",
+      "title": "Объявления",
+      "version": "1",
+      "sha256": "4d1e729c6ba89a4dc253dacc6591742bf702ebade8ee03bcb95abf23d9bd3018",
+      "purpose": ["items", "item-mapping", "spendings"]
+    },
+    {
+      "file": "stock-management.openapi.json",
+      "title": "Управление остатками",
+      "version": "1.0.0",
+      "sha256": "5ce822fccab38dc41a9c2b2c9340775d736b23a4f0058cbd73e475e06c10f159",
+      "purpose": ["avito-stock-read", "avito-stock-write"]
+    },
+    {
+      "file": "user.openapi.json",
+      "title": "Информация о пользователе",
+      "version": "1",
+      "sha256": "c3de3f054277a0756a968aa526b09b459c6c5a74ab9230113ef117358caca88f",
+      "purpose": ["account", "wallet", "operations"]
+    }
+  ]
+}
