@@ -6,9 +6,13 @@ engineStrict: true
 strictPeerDependencies: true
 
 allowBuilds:
+  '@parcel/watcher': false
   cpu-features: false
   esbuild: true
   msgpackr-extract: false
   protobufjs: false
   ssh2: false
   vue-demi: true
+
+minimumReleaseAgeExclude:
+  - vuetify@4.3.0

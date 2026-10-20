@@ -39,3 +39,20 @@ export function assertIntegrationOperationTransition(
     );
   }
 }
+
+/** Source states are derived from the transition policy, including for SQL guards. */
+export function getIntegrationOperationSourceStatuses(
+  target: IntegrationOperationStatus,
+): IntegrationOperationStatus[] {
+  return integrationOperationStatuses.filter((source) =>
+    canTransitionIntegrationOperation(source, target),
+  );
+}
+
+export function canRetryIntegrationOperation(input: {
+  attemptCount: number;
+  maxAttempts: number;
+  terminalFailure: boolean;
+}): boolean {
+  return !input.terminalFailure && input.attemptCount < input.maxAttempts;
+}

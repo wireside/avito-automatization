@@ -1,24 +1,16 @@
-import { createDatabaseClient } from '@avito/database';
-import { createRedisConnection } from '@avito/queue';
+import { createApiRuntime } from './bootstrap/api.js';
+import { readConfig } from './config/index.js';
 
-import { buildApp } from './app.js';
-import { readConfig } from './config.js';
-
-const config = readConfig();
-const database = createDatabaseClient(config.DATABASE_URL);
-const redis = createRedisConnection(config.REDIS_URL);
-const app = await buildApp({ config, database, redis });
-
-const shutdown = async (signal: string) => {
-  app.log.info({ signal }, 'Shutting down API');
-  await app.close();
-  await Promise.all([database.pool.end(), redis.quit()]);
-};
-
+const runtime = await createApiRuntime(readConfig());
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
-    void shutdown(signal).finally(() => process.exit(0));
+    runtime.app.log.info({ signal }, 'Shutting down API');
+    void runtime.close().finally(() => process.exit(0));
   });
 }
-
-await app.listen({ host: config.HOST, port: config.PORT });
+await runtime.start(() => {
+  runtime.app.log.error(
+    'Telegram polling failed; check token, network, webhook, and competing processes',
+  );
+  void runtime.close().finally(() => process.exit(1));
+});

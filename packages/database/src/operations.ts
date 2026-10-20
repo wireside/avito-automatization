@@ -1,14 +1,8 @@
+import { getIntegrationOperationSourceStatuses } from '@avito/domain';
 import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import type { Database } from './client.js';
-import {
-  auditLog,
-  integrationAttempts,
-  integrationOperations,
-  roles,
-  userRoles,
-  users,
-} from './schema.js';
+import { integrationAttempts, integrationOperations } from './schema.js';
 
 export interface CreateIntegrationOperationInput {
   operationType: string;
@@ -62,7 +56,10 @@ export async function claimIntegrationOperation(
       .where(
         and(
           eq(integrationOperations.id, operationId),
-          inArray(integrationOperations.status, ['PENDING', 'RETRY_SCHEDULED']),
+          inArray(
+            integrationOperations.status,
+            getIntegrationOperationSourceStatuses('RUNNING'),
+          ),
           sql`${integrationOperations.attemptCount} < ${integrationOperations.maxAttempts}`,
         ),
       )
@@ -154,7 +151,10 @@ export async function listEnqueueableOperationIds(
     .from(integrationOperations)
     .where(
       and(
-        inArray(integrationOperations.status, ['PENDING', 'RETRY_SCHEDULED']),
+        inArray(
+          integrationOperations.status,
+          getIntegrationOperationSourceStatuses('RUNNING'),
+        ),
         or(
           isNull(integrationOperations.nextAttemptAt),
           lte(integrationOperations.nextAttemptAt, now),
@@ -165,37 +165,4 @@ export async function listEnqueueableOperationIds(
     .orderBy(asc(integrationOperations.createdAt))
     .limit(limit);
   return rows.map(({ id }) => id);
-}
-
-export async function appendAuditLog(
-  db: Database,
-  entry: typeof auditLog.$inferInsert,
-): Promise<void> {
-  await db.insert(auditLog).values(entry);
-}
-
-export async function findActiveUserWithRoles(
-  db: Database,
-  telegramId: string,
-) {
-  const rows = await db
-    .select({
-      id: users.id,
-      telegramId: users.telegramId,
-      displayName: users.displayName,
-      role: roles.name,
-    })
-    .from(users)
-    .leftJoin(userRoles, eq(userRoles.userId, users.id))
-    .leftJoin(roles, eq(roles.id, userRoles.roleId))
-    .where(and(eq(users.telegramId, telegramId), eq(users.isActive, true)));
-
-  const first = rows[0];
-  if (!first) return undefined;
-  return {
-    id: first.id,
-    telegramId: first.telegramId,
-    displayName: first.displayName,
-    roles: rows.flatMap(({ role }) => (role ? [role] : [])),
-  };
 }

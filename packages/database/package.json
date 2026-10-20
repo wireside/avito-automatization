@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@avito/domain": "workspace:*",
     "drizzle-orm": "^0.44.5",
     "pg": "^8.16.3"
   },

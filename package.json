@@ -25,7 +25,11 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "typecheck": "pnpm -r typecheck",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "telegram:setup": "pnpm --filter @avito/backend telegram:setup",
+    "telegram:owner": "pnpm build:packages && pnpm --filter @avito/backend telegram:owner",
+    "dev:telegram": "pnpm --filter @avito/backend dev:telegram",
+    "deploy": "npm --prefix apps/mini-app run deploy"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

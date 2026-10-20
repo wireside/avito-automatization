@@ -1,0 +1,84 @@
+// Configure Vuetify itself; templates use its utilities and component props.
+@forward 'vuetify/settings' with (
+  $body-font-family: (
+    'Inter',
+    system-ui,
+    sans-serif,
+  ),
+  $border-radius-root: 12px,
+  $rounded: (
+    'sm': 8px,
+    'md': 12px,
+    'lg': 16px,
+    'xl': 20px,
+    'nav': 24px,
+  ),
+  $grid-breakpoints: (
+    'xs': 0,
+    'sm': 600px,
+    'md': 960px,
+    'lg': 1280px,
+    'xl': 1920px,
+    'xxl': 2560px,
+  ),
+  $typography: (
+    'headline-large': (
+      'size': 1.875rem,
+      'weight': 700,
+      'line-height': 2.25rem,
+      'letter-spacing': 0,
+    ),
+    'title-large': (
+      'size': 1.75rem,
+      'weight': 700,
+      'line-height': 2.125rem,
+      'letter-spacing': 0,
+    ),
+    'title-medium': (
+      'size': 1.125rem,
+      'weight': 600,
+      'line-height': 1.5rem,
+      'letter-spacing': 0,
+    ),
+    'title-small': (
+      'size': 0.875rem,
+      'weight': 600,
+      'line-height': 1.25rem,
+      'letter-spacing': 0,
+    ),
+    'body-medium': (
+      'size': 0.875rem,
+      'weight': 400,
+      'line-height': 1.25rem,
+      'letter-spacing': 0,
+    ),
+    'body-small': (
+      'size': 0.75rem,
+      'weight': 400,
+      'line-height': 1.125rem,
+      'letter-spacing': 0,
+    ),
+    'label-large': (
+      'size': 0.875rem,
+      'weight': 600,
+      'line-height': 1.25rem,
+      'letter-spacing': 0,
+    ),
+    'label-small': (
+      'size': 0.6875rem,
+      'weight': 500,
+      'line-height': 1rem,
+      'letter-spacing': 0,
+    ),
+  ),
+  $button-font-weight: 600,
+  $button-text-letter-spacing: 0,
+  $button-text-transform: none,
+  $field-font-size: 14px,
+  $field-letter-spacing: 0,
+  $field-control-height: 48px,
+  $field-outline-opacity: 0.3,
+  $table-row-height: 76px,
+  $table-header-height: 40px,
+  $table-header-font-size: 0.6875rem
+);

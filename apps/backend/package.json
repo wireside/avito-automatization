@@ -4,17 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "pnpm clean && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "dev:api": "tsx watch src/api.ts",
     "dev:worker": "tsx watch src/worker.ts",
     "start:api": "node dist/api.js",
     "start:worker": "node dist/worker.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "telegram:setup": "tsx src/cli/telegram-setup.ts",
+    "telegram:owner": "tsx src/cli/telegram-owner.ts",
+    "dev:telegram": "tsx src/dev/telegram.ts"
   },
   "dependencies": {
     "@avito/contracts": "workspace:*",
     "@avito/database": "workspace:*",
+    "@avito/domain": "workspace:*",
     "@avito/integrations": "workspace:*",
     "@avito/observability": "workspace:*",
     "@avito/queue": "workspace:*",

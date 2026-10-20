@@ -8,6 +8,27 @@
       "when": 1790857204187,
       "tag": "0000_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792512226020,
+      "tag": "0001_warehouse_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792512226392,
+      "tag": "0002_inventory_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792512226393,
+      "tag": "0003_intake_location",
+      "breakpoints": true
     }
   ]
 }
