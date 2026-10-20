@@ -1,0 +1,27 @@
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.DS_Store
+.idea/
+.vscode/
+
+# Local Docker data and runtime artifacts.
+.docker-data/
+*.log
+
+# Raw integration evidence may contain credentials, CIS values, or personal data.
+docs/api-fixtures/raw/
+docs/integration-evidence/raw/
+
+# Private signing material must never enter the repository.
+*.key
+*.pem
+*.p12
+*.pfx
