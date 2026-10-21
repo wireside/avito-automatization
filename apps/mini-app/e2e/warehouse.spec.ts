@@ -525,6 +525,16 @@ test('camera layout uses the design reticle and stops tracks when backgrounded',
       value: {
         getUserMedia: () => {
           const stream = canvas.captureStream(12);
+          const redraw = () => {
+            context.fillStyle = '#232426';
+            context.fillRect(0, 0, 640, 480);
+            if (
+              stream.getTracks().some((track) => track.readyState === 'live')
+            ) {
+              requestAnimationFrame(redraw);
+            }
+          };
+          requestAnimationFrame(redraw);
           Object.defineProperty(window, '__testCameraStream', {
             value: stream,
             configurable: true,

@@ -13,7 +13,7 @@ The Mini App uses Vue 3, Vite, Vuetify 4, and TanStack Query for server-owned st
 ## Local start
 
 ```bash
-cp .env.example .env
+test -f .env || cp .env.example .env
 docker compose up -d postgres redis
 pnpm install
 DATABASE_URL=postgresql://avito:avito@localhost:5432/avito pnpm db:migrate
@@ -40,17 +40,17 @@ PostgreSQL is the durable source of truth. Redis/BullMQ only transports operatio
 Register a bot with [BotFather](https://t.me/BotFather) using `/newbot`.
 Save its token only in the ignored root `.env`. Existing credentials in that file must be preserved.
 
-For a local test:
+For a local test with the Mini App on GitHub Pages:
 
 1. Start Docker Desktop, then `docker compose up -d --wait postgres redis`.
-2. Apply migrations using the database URL shown above.
-3. Obtain a public HTTPS tunnel to port 5173, for example `ssh -T -R 80:127.0.0.1:5173 nokey@localhost.run`.
-4. Set `TELEGRAM_MODE=polling`, `TELEGRAM_BOT_TOKEN`, `MINI_APP_URL=https://your-tunnel-host`, `MINI_APP_ORIGIN=https://your-tunnel-host`, and `MINI_APP_TUNNEL_HOST=your-tunnel-host` in `.env`. Leave `VITE_API_BASE_URL` empty so `/api` uses the same origin through Vite's proxy.
-5. Run `pnpm telegram:setup`, then `pnpm dev`. Keep both the tunnel and development processes running.
+2. Apply migrations using the explicitly selected database URL shown above.
+3. Set permanent `TELEGRAM_MODE=polling`, `TELEGRAM_BOT_TOKEN`, `MINI_APP_URL=https://wireside.github.io/avito-automatization/` and optional `TELEGRAM_SETUP_CHAT_ID` in the existing `.env` once.
+4. Run `npm run dev:telegram`. It starts API/bot, worker and the public HTTPS API tunnel without editing `.env`.
+5. In another terminal run the printed `VITE_API_BASE_URL=https://... npm run deploy` command. This publishes the frontend with the current API tunnel address.
 6. Open the bot in Telegram. `/start` and `/app` show an inline button; the menu button also opens the Mini App. `/id` reports the user's numeric ID in a private chat.
-7. Grant the intended owner access explicitly with `pnpm telegram:owner <numeric-user-id>`. Reopen the Mini App. There is no automatic first-user signup.
+7. Grant the intended owner access explicitly with `pnpm telegram:owner <numeric-user-id>` if needed. Reopen the Mini App. There is no automatic first-user signup.
 
-A temporary tunnel may change its hostname when restarted. Update `.env`, restart `pnpm dev`, and rerun `pnpm telegram:setup` when that happens. Run one polling instance per bot. Stop with Ctrl+C.
+Keep the helper terminal running. A temporary API tunnel may change hostname after reconnecting; repeat frontend deployment with the newly printed URL. The Pages Mini App URL stays unchanged. Run one polling instance per bot. Stop with Ctrl+C.
 
 For production, build the Mini App and serve its `dist` through HTTPS with `/api` and `/webhooks/telegram` routed to Fastify. Set `NODE_ENV=production`, `TELEGRAM_MODE=webhook`, the public `MINI_APP_URL` and `MINI_APP_ORIGIN`, and `TELEGRAM_WEBHOOK_URL=https://your-domain/webhooks/telegram`. Generate a random `TELEGRAM_WEBHOOK_SECRET` containing only letters, digits, `_` and `-`. Start API and worker separately, then run `pnpm telegram:setup`. Do not expose the Vite development server for permanent use.
 
@@ -60,7 +60,9 @@ Webhook duplicate suppression in Redis covers transport replies only. It is disp
 
 Telegram contracts verified 2026-10-19 against [Mini Apps](https://core.telegram.org/bots/webapps) and [Bot API](https://core.telegram.org/bots/api). Tests mock bot replies; actual chat behavior still needs a check from the owner's Telegram client.
 
-For a managed local connection, use `pnpm dev:telegram` instead of running the SSH tunnel and `pnpm dev` separately. It reconnects after tunnel failure and updates the Mini App URL, local processes and bot menu together. Run only one instance. Old message buttons retain the old URL: send `/app` again after reconnecting. The terminal and Mac must stay running.
+For a GitHub Pages Mini App with a local backend, use `npm run dev:telegram`. This builds workspace packages, starts API/bot and worker, opens an HTTPS tunnel directly to the API port and updates the Telegram menu to the configured `MINI_APP_URL`. It never edits `.env` or other configuration files. The exact frontend origin is passed to the API process for CORS. Run one instance per bot and leave its terminal open.
+
+After the helper reports API readiness, run its printed `VITE_API_BASE_URL=https://... npm run deploy` command in a second terminal. The value is used only for that build and is embedded in the published frontend; it is not saved to `.env`. If the tunnel reconnects with a new hostname, repeat deployment with the new printed URL. GitHub Pages hosts the frontend; the Mac still runs API, bot, database and worker. Close/reopen Mini App after publication. Old Telegram message buttons retain their URL.
 
 Set optional `TELEGRAM_SETUP_CHAT_ID` to the owner's private chat ID to read back that chat's menu after setup. `/start`, `/app` and ordinary text also refresh the current chat menu before replying.
 
@@ -76,11 +78,11 @@ SQL and transactions remain in `packages/database`; PostgreSQL constraints/trigg
 
 Run `npm run deploy` from the repository root or `apps/mini-app`. The `predeploy` command builds the Mini App with base `/avito-automatization/`; `deploy` publishes `dist` to the `gh-pages` branch of `origin` using the installed `gh-pages` CLI. Deployment does not require a global pnpm executable after workspace dependencies are installed.
 
-Set the public HTTPS backend address in root `.env` as `VITE_API_BASE_URL`. Git push access and a configured Git name/email are required. If the repository name changes, update the `--base` argument in the Mini App's `predeploy` command.
+For a temporary backend tunnel, pass `VITE_API_BASE_URL=https://your-api-tunnel npm run deploy`; this does not edit `.env`. For a permanent backend, you can save its public HTTPS origin in root `.env` as `VITE_API_BASE_URL`. Git push access and a configured Git name/email are required. If the repository name changes, update the `--base` argument in the Mini App's `predeploy` command.
 
 After the first deploy, select **Settings → Pages → Deploy from a branch → gh-pages → / (root)** on GitHub. The expected site URL is `https://wireside.github.io/avito-automatization/`.
 
-Once the site is reachable, set backend `MINI_APP_URL=https://wireside.github.io/avito-automatization/` and `MINI_APP_ORIGIN=https://wireside.github.io`, restart the backend and run `pnpm telegram:setup`. Backend, bot and database hosting remain separate. Stop the local `pnpm dev:telegram` helper when switching the bot to Pages, since that helper manages a temporary development URL.
+Once the site is reachable, set backend `MINI_APP_URL=https://wireside.github.io/avito-automatization/` and `MINI_APP_ORIGIN=https://wireside.github.io`, restart the backend and run `pnpm telegram:setup`. Backend, bot and database hosting remain separate. The `npm run dev:telegram` helper keeps the configured Pages URL and creates a temporary API tunnel only.
 
 ## Warehouse database model
 
@@ -208,3 +210,16 @@ The error `requestId` equals `x-correlation-id` and identifies this HTTP attempt
 | 422       | `INVALID_MARKING`, `INVALID_GTIN`: rescan/check scanner settings                                                                                                                 |
 | 500       | `INTERNAL_ERROR`: result may be uncertain; retain the scan UUID for a retry                                                                                                      |
 | 503       | `TELEGRAM_NOT_CONFIGURED`, `INVENTORY_NOT_CONFIGURED`, `MARKING_STORAGE_NOT_CONFIGURED`, `WAREHOUSE_UNAVAILABLE`: configuration/destination unavailable; retain any pending scan |
+
+## Local development and checking GitHub Pages
+
+Existing `.env` is user-owned: dev commands read it and never rewrite it. Put permanent local credentials/settings there once. Shell assignments override settings only for one command. Do not copy `.env.example` over an existing `.env`.
+
+1. Start Docker Desktop, run `docker compose up -d --wait postgres redis`, install dependencies with `pnpm install --frozen-lockfile` when needed.
+2. Apply migrations with an explicitly selected database, for example `DATABASE_URL=postgresql://avito:avito@localhost:5432/avito npm run db:migrate`. Both `db:migrate` and `db:generate` build the database package's workspace dependencies first, so a fresh checkout does not need pre-existing `domain/dist`. CI uses the same command, rather than relying on a later `verify` build.
+3. For browser-only UI development, run `TELEGRAM_MODE=disabled VITE_API_BASE_URL= npm run dev` and open `http://localhost:5173`. Vite proxies `/api` to local Fastify. Telegram-protected actions still require signed initData; opening the URL directly does not authenticate the browser.
+4. For Telegram + hosted Mini App, configure `MINI_APP_URL=https://wireside.github.io/avito-automatization/`, `TELEGRAM_MODE=polling`, bot token and optional private setup chat ID in `.env`; then run `npm run dev:telegram`. No Vite frontend/tunnel is needed for this mode: the frontend comes from Pages, HTTPS tunnel points to the local API.
+5. In another terminal run the exact `VITE_API_BASE_URL=... npm run deploy` printed by the helper. Wait for Pages publication, open the bot, send `/app`, and reopen Mini App. The published JS contacts the API tunnel; Fastify validates Telegram initData and local roles before returning stock. The worker handles background operations and is started by the helper.
+6. `https://<tunnel>/health/ready` checks PostgreSQL/Redis; `/api/v1/openapi.json` exposes the API contract. A 401 for an unsigned inventory request is expected. Authenticated warehouse responses should be 200; no CORS wildcard or auth bypass is used.
+
+Stop with Ctrl+C. The tunnel has a temporary lifetime and no production uptime guarantee. If the Mac sleeps or its terminal stops, the Pages UI can load but API actions will fail until the backend/tunnel is restored. A different tunnel hostname requires a new frontend build because Vite settings are compiled into JavaScript. For permanent use, replace the tunnel with a stable HTTPS backend and deploy once with that address. For stock intake configure a backed-up persistent `MARKING_ENCRYPTION_KEY`; the dev helper never generates or replaces it.

@@ -7,3 +7,4 @@ docs/openapi
 packages/database/migrations/meta
 AGENTS.md
 PROJECT_SPEC.md
+pnpm-lock.yaml

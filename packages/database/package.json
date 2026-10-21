@@ -16,8 +16,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/migrate.ts",
+    "db:generate": "pnpm --filter \"@avito/database^...\" build && drizzle-kit generate",
+    "db:migrate": "pnpm --filter \"@avito/database^...\" build && tsx src/migrate.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

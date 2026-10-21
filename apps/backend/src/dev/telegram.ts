@@ -1,12 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { readConfig } from '../config/index.js';
 import { configureTelegramBot, createTelegramBot } from '../telegram/index.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
-const envPath = new URL('../../../../.env', import.meta.url);
 const initial = readConfig();
 if (
   initial.NODE_ENV === 'production' ||
@@ -41,8 +39,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   });
 }
 
-// Local development only. SSH reconnects may allocate a different hostname;
-// refresh .env, API, Vite and Telegram menu together before declaring readiness.
+// Local API tunnel for a Mini App hosted on GitHub Pages.
+// Runtime overrides are passed to children; local configuration is never written.
 while (!stopping) {
   let stage = 'tunnel';
   try {
@@ -65,7 +63,7 @@ while (!stopping) {
         'IdentityFile=/dev/null',
         '-T',
         '-R',
-        '80:127.0.0.1:5173',
+        `80:127.0.0.1:${initial.PORT}`,
         'nokey@localhost.run',
       ],
       { detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
@@ -94,51 +92,55 @@ while (!stopping) {
       }),
     ]);
     if (stopping) break;
+    const miniAppUrl = initial.MINI_APP_URL!;
     const overrides = {
-      MINI_APP_URL: url,
-      MINI_APP_ORIGIN: url,
-      MINI_APP_TUNNEL_HOST: new URL(url).hostname,
-      VITE_API_BASE_URL: '',
+      TELEGRAM_MODE: 'polling',
+      MINI_APP_URL: miniAppUrl,
+      MINI_APP_ORIGIN: new URL(miniAppUrl).origin,
     };
-    let envFile = await readFile(envPath, 'utf8');
-    for (const [key, value] of Object.entries(overrides)) {
-      const pattern = new RegExp(`^${key}=.*$`, 'm');
-      envFile = pattern.test(envFile)
-        ? envFile.replace(pattern, `${key}=${value}`)
-        : `${envFile}\n${key}=${value}\n`;
-    }
-    await writeFile(envPath, envFile, { mode: 0o600 });
-    development = spawn('pnpm', ['dev'], {
-      cwd: root,
-      env: { ...process.env, ...overrides },
-      detached: true,
-      stdio: 'inherit',
-    });
+    development = spawn(
+      'pnpm',
+      [
+        'exec',
+        'concurrently',
+        '-n',
+        'api,worker',
+        '-c',
+        'blue,magenta',
+        'npm --prefix apps/backend run dev:api',
+        'npm --prefix apps/backend run dev:worker',
+      ],
+      {
+        cwd: root,
+        env: { ...process.env, ...overrides },
+        detached: true,
+        stdio: 'inherit',
+      },
+    );
     const developmentEnded = new Promise<void>((resolve) => {
       development!.once('close', () => resolve());
       development!.once('error', () => resolve());
     });
-    const bot = createTelegramBot(initial.TELEGRAM_BOT_TOKEN, url);
+    const bot = createTelegramBot(initial.TELEGRAM_BOT_TOKEN, miniAppUrl);
     stage = 'telegram-menu';
-    await configureTelegramBot(bot, url, initial.TELEGRAM_SETUP_CHAT_ID);
-    stage = 'public-app';
+    await configureTelegramBot(bot, miniAppUrl, initial.TELEGRAM_SETUP_CHAT_ID);
+    stage = 'public-api';
     let reachable = false;
     for (let attempt = 0; attempt < 20 && !stopping; attempt++) {
       try {
-        const response = await fetch(url, {
+        const response = await fetch(`${url}/health/ready`, {
           signal: AbortSignal.timeout(5_000),
         });
-        reachable =
-          response.ok && (await response.text()).includes('Авито Операции');
+        reachable = response.ok;
         if (reachable) break;
       } catch {
         /* The app or tunnel is still starting. */
       }
       await pause(1_000);
     }
-    if (!reachable) throw new Error('Public application is unreachable');
+    if (!reachable) throw new Error('Public API is not ready');
     console.log(
-      `Mini App is reachable: ${url}. Reopen it from a NEW /app response.`,
+      `Mini App: ${miniAppUrl}\nAPI tunnel: ${url}\nPublish frontend for this tunnel (separate terminal):\nVITE_API_BASE_URL=${url} npm run deploy\n.env is unchanged. After a tunnel reconnect, rebuild/deploy for its new URL.`,
     );
     await Promise.race([tunnelEnded, developmentEnded]);
   } catch {

@@ -49,6 +49,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # db:migrate builds database workspace dependencies before loading the schema.
       - run: pnpm db:migrate
       - run: pnpm verify
       - run: pnpm exec playwright install --with-deps chromium

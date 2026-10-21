@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { grantOwnerAccess, findActiveUserWithRoles } from './users.js';
 import { createDatabaseClient } from './client.js';
 import { createIntegrationOperation } from './operations.js';
-import { integrationOperations, users, auditLog } from './schema.js';
+import { integrationOperations } from './schema.js';
 
 const databaseUrl =
   process.env.RUN_DATABASE_TESTS === 'true'
@@ -15,7 +15,6 @@ const databaseUrl =
 const suite = databaseUrl ? describe : describe.skip;
 const client = databaseUrl ? createDatabaseClient(databaseUrl) : undefined;
 const createdIds: string[] = [];
-const createdUserIds: string[] = [];
 
 suite('durable integration operations', () => {
   afterAll(async () => {
@@ -25,10 +24,8 @@ suite('durable integration operations', () => {
         .delete(integrationOperations)
         .where(eq(integrationOperations.id, id));
     }
-    for (const id of createdUserIds) {
-      await client.db.delete(auditLog).where(eq(auditLog.entityId, id));
-      await client.db.delete(users).where(eq(users.id, id));
-    }
+    // Audit history and its users stay in the disposable test database.
+    // Deleting audit records would violate the append-only invariant.
     await client.pool.end();
   });
 
@@ -40,7 +37,6 @@ suite('durable integration operations', () => {
     await grantOwnerAccess(client.db, telegramId, randomUUID());
     const user = await findActiveUserWithRoles(client.db, telegramId);
     expect(user?.roles).toEqual(['OWNER']);
-    if (user) createdUserIds.push(user.id);
     await grantOwnerAccess(client.db, telegramId, randomUUID());
     expect(
       (await findActiveUserWithRoles(client.db, telegramId))?.roles,
