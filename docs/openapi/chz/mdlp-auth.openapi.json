@@ -1,0 +1,137 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CHZ / mdlp-auth / archive reference",
+    "version": "2026-10-27",
+    "description": "Reconstructed from user-supplied PDF, NOT an official Swagger export. Complete method index with source documentation; typed schemas cover only explicitly marked subsets, not the entire protocol. No account access or live verification is implied. Default host deliberately cannot execute requests. National Catalog accepts API key OR Bearer, never both. Read linked source tables, group-specific requirements and conflicting examples before implementing an adapter."
+  },
+  "servers": [
+    {
+      "url": "https://example.invalid",
+      "description": "Documentation-only default. Choose an authorized environment explicitly."
+    },
+    {
+      "url": "https://api.sb.mdlp.crpt.ru",
+      "description": "Sandbox; MDLP only, outside clothing scope"
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/api/{version}/auth": {
+      "post": {
+        "operationId": "mdlp_auth_post_api_version_auth",
+        "summary": "Метод для получения кода аутентификации",
+        "tags": ["9"],
+        "description": "**Source-documentation operation, not a complete generated-client contract.**\n\n### suz-api-3.0.40, PDF pp. 597-600, section 9.3.1.1\n\n[Original PDF](/docs/chz/sources/suz-api-3.0.40.pdf#page=597)\n\n```text\n9.3.1.1. Метод для получения кода аутентификации  \nЭтот метод используется для получения кода аутентификации. \n9.3.1.1.1. Запрос  \nПример запроса с использованием типа аутентификации «PASSWORD» \nотображает Рисунок 245. \nPOST api/v1/auth HTTP/1.1 \nHost: api.sb.mdlp.crpt.ru \nContent-Type: application/json \nAccept: application/json \n \n{  \n  \"client_id\": \"7df0d06f-6510-44fe-a378-76cb53e2605f\", \n[credential/request example omitted]\n  \"user_id\" : \"user@example.org\", \n[credential/request example omitted]\n} \nПример REST запроса (для типа аутентификации «PASSWORD»)  \nРисунок 245 \nПример запроса с использованием типа аутентификации «SIGNED_CODE» \nотображает Рисунок 246. \nPOST api/v1/auth HTTP/1.1 \nHost: api.sb.mdlp.crpt.ru \nContent-Type: application/json \nAccept: application/json \n \n{  \n  \"client_id\": \"7df0d06f-6510-44fe-a378-76cb53e2605f\", \n[credential/request example omitted]\n  \"user_id\" : \"1865725612 \", \n  \"auth_type\" : \"SIGNED_CODE\"    \n} \nПример REST запроса (для типа аутентификации «SIGNED_CODE») \nРисунок 246 \n \nПараметры REST запроса отображает Таблица 371. \n \nТаблица 371 – Параметры REST запроса \nПараметр Значение \nHTTP метод POST \nURL <url стенда>/<version>/auth \nПараметры HTTP заголовка отображает Таблица 372. \n598 \nRU 15861920.620111-04 33 07 \n \n \nТаблица 372 – Параметры HTTP заголовка (HTTP Header) \nПараметр Описание Тип Обязательность \nContent-type application/json Строка Да \nAccept application/json Строка Да \n \nПараметры тела запроса отображает Таблица 373. \n \nТаблица 373 – Параметры тела запроса (HTTP Body) \nПоле Описание Тип Обязательность \nclient_id Идентификатор клиента Строка \n(GUID) Да \n[credential/request example omitted]\nuser_id \nУникальный идентификатор \nпользователя.  \nЕсли идентификация идет для \nрезидента, то это поле \nзаполняется идентификатором \nсертификата*, если для \nнерезидента, то – email. \nСтрока Да \nauth_type \nТип аутентификации. \nПринимает значения: \n- SIGNED_CODE - ЭЦП \n(резиденты) \n- PASSWORD - пароль \n(нерезиденты) \nСтрока Да \nПримечание. Идентификатор сертификата — это серийный номер сертификата в \nдесятичной форме либо отпечаток сертификата (требуемый алгоритм хеширования –\nSHA1). Так же допускается использование идентификатора пользователя user_id, который \nвозвращается в выходных данных при регистрации пользователя в ИС МДЛП (Метод для \nрегистрации пользователей учетной системы (для резидентов страны). \n9.3.1.1.2. Ответ \nПример JSON ответа отображает Рисунок 247. \nHTTP/1.1 200 OK \nContent-Type: application/json \n \n{ \n  \"code\":\"b7b1abc9-f4ee-47db-8a20-f80ac83504e8\"   \n} \n \nПример JSON ответа \nРисунок 247 \n \n599 \nRU 15861920.620111-04 33 07 \n \nПри успешном выполнении запроса сервер возвращает HTTP код 200 и код для \nаутентификации. \nСтруктуру ответа на запрос отображает Таблица 374.  \nТаблица 374 – Формат ответа на запрос  \nПоле Описание Тип Обязательность \ncode Код для аутентификации Строка \n(GUID) Да \n600 \nRU 15861920.620111-04 33 07 \n \n```",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "See complete success/error tables in the source below. Unknown response shape is deliberately unrestricted.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-source": [
+          {
+            "document": "suz-api-3.0.40",
+            "pages": [597, 600],
+            "declarationPage": 597,
+            "section": "9.3.1.1",
+            "title": "Метод для получения кода аутентификации"
+          }
+        ],
+        "x-side-effects": "mutation-or-document-generation",
+        "x-live-verified": false,
+        "x-project-scope": "Not for lp; MDLP authentication only."
+      }
+    },
+    "/api/{version}/token/{omsConnection}": {
+      "post": {
+        "operationId": "mdlp_auth_post_api_version_token_omsConnection",
+        "summary": "Метод для получения ключа сессии",
+        "tags": ["9"],
+        "description": "**Source-documentation operation, not a complete generated-client contract.**\n\n### suz-api-3.0.40, PDF pp. 600-603, section 9.3.1.2\n\n[Original PDF](/docs/chz/sources/suz-api-3.0.40.pdf#page=600)\n\n```text\n9.3.1.2. Метод для получения ключа сессии \nЭтот метод используется для получения маркера безопасности \n(аутентификационного токена) для СУЗ. Для токена для СУЗ в метод добавлен параметр  \n«omsConnection» - уникальный идентификатор внешнего подключения, присвоенный \nзарегистрированной установке интеграционного решения. \n9.3.1.2.1. Запрос \nПример JSON запроса (для типа аутентификации «PASSWORD») отображает \nРисунок 248. \nPOST api/v1/token/1a7ef78e-597a-424e-8e81-1994109b90be HTTP/1.1 \nHost: api.sb.mdlp.crpt.ru \nAccept: application/json \nContent-Type: application/json \n \n{ \n  \"code\":\"b7b1abc9-f4ee-47db-8a20-f80ac83504e8\",  \n[credential/request example omitted]\n} \nПример JSON запроса (для типа аутентификации «PASSWORD») \nРисунок 248 \nПример JSON запроса (для типа аутентификации «SIGNED_CODE») отображает \nРисунок 249. \nPOST api/v1/token/1a7ef78e-597a-424e-8e81-1994109b90be HTTP/1.1 \nHost: api.sb.mdlp.crpt.ru \nAccept: application/json \nContent-Type: application/json \n \n{ \n  \"code\":\"b7b1abc9-f4ee-47db-8a20-f80ac83504e8\",  \n  \"signature\":\"<Подпись в base64>\" \n} \nПример JSON запроса (для типа аутентификации «SIGNED_CODE») \nРисунок 249 \n \nПараметры REST запроса отображает Таблица 375. \nТаблица 375 – Параметры REST запроса \nПараметр Значение \nHTTP метод POST \nURL <url стенда>/<version>/token/{omsConnection} \nПараметры HTTP заголовка отображает Таблица 376. \n601 \nRU 15861920.620111-04 33 07 \n \n \nТаблица 376 – Параметры HTTP заголовка (HTTP Header) \nПараметр Описание Тип Обязательность \nContent-type application/json Строка Да \nAccept application/json Строка Да \n \nПараметры строки запроса отображает Таблица 377. \nТаблица 377 – Параметры строки запроса (Query string parameters) \nПоле Описание Тип Обязательность \nomsConnection \nУникальный идентификатор \nвнешнего подключения, \nприсвоенный \nзарегистрированной установке \nинтеграционного решения. \nВыдается при регистрации \nустановки интеграционного \nрешения (См. подраздел 9.2). \nСтрока \nДолжен быть указан \nдля получения токена \nдля доступа к API \nСУЗ \nПримечание. На переходном этапе получение уникального идентификатора \nвнешнего подключения (omsConnection) также будет доступно посредством регистрации в \nпользовательском интерфейсе СУЗ клиентского устройства (системы), которое будет \nвзаимодействовать посредством API СУЗ. \nПараметры тела запроса отображает Таблица 378. \nТаблица 378 – Параметры тела запроса (HTTP Body) \nПоле Описание Тип Обязательность \ncode Код для аутентификации String \n(GUID) Да \nsignature Открепленная подпись кода \nдля аутентификации в base64 \nString \nНет \n(Обязательный для \nтипа аутентификации \nSIGNED_CODE) \npassword Пароль пользователя String \nНет \n(Обязательный для \nтипа аутентификации \nPASSWORD) \n9.3.1.2.2. Ответ \nПример JSON ответа отображает Рисунок 250. \n602 \nRU 15861920.620111-04 33 07 \n \nHTTP/1.1 200 OK \nContent-Type: application/json \n \n{ \n  \"token\":\"58f908f1-832a-4ad0-93f4-bdafbf8eb55a\", \n  \"life_time\": 30 \n} \n \nПример JSON ответа \nРисунок 250 \n \nПри успешном выполнении запроса сервер возвращает HTTP код 200, токен и срок \nего действия в минутах.   \nСтруктуру ответа на запрос отображает Таблица 379.  \nТаблица 379 – Формат ответа на запрос  \nПоле Описание Тип Обязательность \ntoken \nАутентификационный токен. \nПараметр обязательный в случае \nуспешного ответа \nСтрока Да \nlife_time Срок действия токена в минутах Число Да \n603 \nRU 15861920.620111-04 33 07 \n \n```",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "omsConnection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "See complete success/error tables in the source below. Unknown response shape is deliberately unrestricted.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-source": [
+          {
+            "document": "suz-api-3.0.40",
+            "pages": [600, 603],
+            "declarationPage": 600,
+            "section": "9.3.1.2",
+            "title": "Метод для получения ключа сессии"
+          }
+        ],
+        "x-side-effects": "mutation-or-document-generation",
+        "x-live-verified": false,
+        "x-project-scope": "Not for lp; MDLP authentication only."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "TrueApiBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "NationalCatalogApiKey": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "apikey"
+      },
+      "SuzClientToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "clientToken"
+      },
+      "RegistrationKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-RegistrationKey"
+      }
+    }
+  },
+  "x-origin": "Reconstruction of API_CHZ.zip; no credentials; no live calls",
+  "x-source-index": "../../chz/sources/index.json",
+  "x-codegen-ready": false
+}

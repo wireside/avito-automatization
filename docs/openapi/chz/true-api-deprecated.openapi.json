@@ -1,0 +1,520 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CHZ / deprecated True API routes / do not implement",
+    "version": "2026-10-27",
+    "description": "Historical index only. These methods are withdrawn or unsupported, not fallback endpoints. See true-api-deprecations.pdf. Relative paths use the v3 True API prefix unless shown otherwise."
+  },
+  "servers": [
+    {
+      "url": "https://example.invalid",
+      "description": "Disabled historical reference"
+    }
+  ],
+  "paths": {
+    "/api/v3/true-api/facade/tnved/search": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_facade_tnved_search",
+        "summary": "DEPRECATED: /api/v3/true-api/facade/tnved/search",
+        "description": "POST /api/v4/true-api/tn-ved/search",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v4/true-api/tn-ved/search",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/cises/listV2": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_cises_listV2",
+        "summary": "DEPRECATED: /api/v3/true-api/cises/listV2",
+        "description": "POST /api/v4/true-api/cises/search",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v4/true-api/cises/search",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/products/listV2": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_products_listV2",
+        "summary": "DEPRECATED: /api/v3/true-api/products/listV2",
+        "description": "POST /api/v4/true-api/cises/search",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v4/true-api/cises/search",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/cises/aggregated/list": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_cises_aggregated_list",
+        "summary": "DEPRECATED: /api/v3/true-api/cises/aggregated/list",
+        "description": "POST /api/v3/true-api/cises/aggregated/list",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v3/true-api/cises/aggregated/list",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/products/info": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_products_info",
+        "summary": "DEPRECATED: /api/v3/true-api/products/info",
+        "description": "POST /api/v3/true-api/cises/info; POST /api/v3/true-api/cises/short/list; POST /api/v4/true-api/product/info",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v3/true-api/cises/info; POST /api/v3/true-api/cises/short/list; POST /api/v4/true-api/product/info",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/km-owner-api/cises": {
+      "post": {
+        "operationId": "legacy_post_api_v3_true_api_km_owner_api_cises",
+        "summary": "DEPRECATED: /api/v3/true-api/km-owner-api/cises",
+        "description": "POST /api/v3/true-api/cises/info",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v3/true-api/cises/info",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/doc/{docId}/info": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_doc_docId_info",
+        "summary": "DEPRECATED: /api/v3/true-api/doc/{docId}/info",
+        "description": "GET /api/v4/true-api/doc/{docId}/info",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "docId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "GET /api/v4/true-api/doc/{docId}/info",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/receipt/{receiptId}/info": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_receipt_receiptId_info",
+        "summary": "DEPRECATED: /api/v3/true-api/receipt/{receiptId}/info",
+        "description": "GET /api/v4/true-api/receipt/{receiptId}/info",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "receiptId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "GET /api/v4/true-api/receipt/{receiptId}/info",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/doc/listV2": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_doc_listV2",
+        "summary": "DEPRECATED: /api/v3/true-api/doc/listV2",
+        "description": "GET /api/v4/true-api/doc/list",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "GET /api/v4/true-api/doc/list",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [2, 2],
+            "declarationPage": 2,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/receipt/listV2": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_receipt_listV2",
+        "summary": "DEPRECATED: /api/v3/true-api/receipt/listV2",
+        "description": "POST /api/v3/true-api/receipt/search",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v3/true-api/receipt/search",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/documents/{document_id}/info": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_documents_document_id_info",
+        "summary": "DEPRECATED: /api/v3/true-api/documents/{document_id}/info",
+        "description": "GET /api/v4/true-api/doc/{docId}/info",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "GET /api/v4/true-api/doc/{docId}/info",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/elk/registration": {
+      "post": {
+        "operationId": "legacy_post_api_v3_true_api_elk_registration",
+        "summary": "DEPRECATED: /api/v3/true-api/elk/registration",
+        "description": "Official registration UI; no replacement API asserted",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "Official registration UI; no replacement API asserted",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/elk/documents/status/{documentId}": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_elk_documents_status_documentId",
+        "summary": "DEPRECATED: /api/v3/true-api/elk/documents/status/{documentId}",
+        "description": "Official registration UI; no replacement API asserted",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "Official registration UI; no replacement API asserted",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/product/info": {
+      "get": {
+        "operationId": "legacy_get_api_v3_true_api_product_info",
+        "summary": "DEPRECATED: /api/v3/true-api/product/info",
+        "description": "POST /api/v4/true-api/product/info",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v4/true-api/product/info",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/documents/dropped-out/create": {
+      "post": {
+        "operationId": "legacy_post_api_v3_true_api_documents_dropped_out_create",
+        "summary": "DEPRECATED: /api/v3/true-api/documents/dropped-out/create",
+        "description": "Unified document creation with WRITE_OFF; source spells /api/v3/lk/documents/create, unlike the full v3 True API base. Verify before calling.",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "Unified document creation with WRITE_OFF; source spells /api/v3/lk/documents/create, unlike the full v3 True API base. Verify before calling.",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/product/route/gtin": {
+      "post": {
+        "operationId": "legacy_post_api_v3_true_api_product_route_gtin",
+        "summary": "DEPRECATED: /api/v3/true-api/product/route/gtin",
+        "description": "POST /api/v4/true-api/product/info",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v4/true-api/product/info",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v4/true-api/receipt/list": {
+      "get": {
+        "operationId": "legacy_get_api_v4_true_api_receipt_list",
+        "summary": "DEPRECATED: /api/v4/true-api/receipt/list",
+        "description": "POST /api/v3/true-api/receipt/search",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "POST /api/v3/true-api/receipt/search",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    },
+    "/api/v3/true-api/documents/aggregation/create": {
+      "post": {
+        "operationId": "legacy_post_api_v3_true_api_documents_aggregation_create",
+        "summary": "DEPRECATED: /api/v3/true-api/documents/aggregation/create",
+        "description": "Same method using JSON; XML variant withdrawn. Current method has group restrictions.",
+        "deprecated": true,
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Historical reference, do not execute"
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-side-effects": "historical-do-not-call",
+        "x-live-verified": false,
+        "x-replacement": "Same method using JSON; XML variant withdrawn. Current method has group restrictions.",
+        "x-source": [
+          {
+            "document": "true-api-deprecations",
+            "pages": [3, 3],
+            "declarationPage": 3,
+            "section": "Deprecated methods"
+          }
+        ]
+      }
+    }
+  }
+}

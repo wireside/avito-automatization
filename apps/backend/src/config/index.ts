@@ -56,6 +56,16 @@ const configSchema = z.object({
     .regex(/^[A-Za-z0-9_-]{1,64}$/)
     .default('local-v1'),
   TELEGRAM_BOT_TOKEN: optionalSecret,
+  CHZ_NATIONAL_CATALOG_API_KEY: optionalSecret,
+  CHZ_NATIONAL_CATALOG_ENVIRONMENT: z
+    .enum(['production', 'sandbox'])
+    .default('production'),
+  CHZ_NATIONAL_CATALOG_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(500)
+    .max(10000)
+    .default(5000),
   TELEGRAM_WEBHOOK_SECRET: optionalSecret,
   TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: z.coerce
     .number()

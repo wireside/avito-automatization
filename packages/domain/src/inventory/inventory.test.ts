@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createReceiveStock, createReadInventory } from './inventory.js';
+import type { ReceiptCatalog } from './receipt-catalog.js';
 const user = {
   id: 'user',
   telegramId: '42',
@@ -64,5 +65,107 @@ describe('inventory scenarios', () => {
       ),
     ).toEqual({ ok: false, code: 'FORBIDDEN' });
     expect(list).not.toHaveBeenCalled();
+  });
+  it('looks up only the parsed GTIN after access, format and encryption checks', async () => {
+    const lookupCatalog = vi.fn().mockResolvedValue({ status: 'NOT_FOUND' });
+    const receive = vi.fn().mockResolvedValue({
+      ok: true,
+      outcome: 'ACCEPTED',
+      unit: {},
+      replayed: false,
+    });
+    const protectMarking = vi
+      .fn()
+      .mockReturnValue({ payloadCiphertext: 'encrypted' });
+    const scenario = createReceiveStock({
+      receive,
+      lookupCatalog,
+      protectMarking,
+    });
+    await scenario({ ...user, roles: ['VIEWER'] }, input);
+    await scenario(user, { ...input, raw: 'invalid' });
+    await createReceiveStock({ receive, lookupCatalog })(user, input);
+    expect(lookupCatalog).not.toHaveBeenCalled();
+    expect(await scenario(user, input)).toMatchObject({
+      ok: true,
+      catalogLookup: 'NOT_FOUND',
+    });
+    expect(lookupCatalog).toHaveBeenCalledExactlyOnceWith('04660430764543');
+    expect(protectMarking.mock.invocationCallOrder[0]).toBeLessThan(
+      lookupCatalog.mock.invocationCallOrder[0]!,
+    );
+  });
+  it('persists enrichment and skips the remote request when the variant is already saved', async () => {
+    const product: ReceiptCatalog = {
+      gtin: '04660430764543',
+      sourceReference: 'national-catalog:123',
+      observedAt: '2026-10-27T12:00:00.000Z',
+      status: 'RESOLVED',
+      name: 'Брюки ZZ-8 белый XL',
+      sourceName: 'Брюки',
+      article: 'ZZ-8',
+      color: 'белый',
+      size: 'XL',
+      sizeSystem: null,
+      materialComposition: null,
+      attributes: [],
+    };
+    const receive = vi.fn().mockResolvedValue({
+      ok: true,
+      unit: {},
+      outcome: 'ACCEPTED',
+      replayed: false,
+    });
+    const lookupCatalog = vi
+      .fn()
+      .mockResolvedValue({ status: 'FOUND', product });
+    const needsCatalogLookup = vi
+      .fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const scenario = createReceiveStock({
+      receive,
+      lookupCatalog,
+      needsCatalogLookup,
+      protectMarking: () => ({
+        identityHash: 'hash',
+        inputFingerprint: 'fingerprint',
+        payloadCiphertext: 'encrypted',
+        encryptionKeyId: 'test',
+      }),
+    });
+    await scenario(user, input);
+    expect(receive).toHaveBeenLastCalledWith(
+      expect.objectContaining({ catalog: product }),
+    );
+    await scenario(user, input);
+    expect(lookupCatalog).toHaveBeenCalledTimes(1);
+    expect(receive.mock.calls[1]?.[0]).not.toHaveProperty('catalog');
+  });
+  it('still receives into quarantine if the provider fails, without leaking errors or plaintext', async () => {
+    const receive = vi.fn().mockResolvedValue({
+      ok: true,
+      outcome: 'ACCEPTED',
+      unit: { state: 'QUARANTINE' },
+      replayed: false,
+    });
+    const scenario = createReceiveStock({
+      receive,
+      lookupCatalog: () => Promise.reject(new Error('sensitive provider URL')),
+      protectMarking: () => ({
+        identityHash: 'hash',
+        inputFingerprint: 'fingerprint',
+        payloadCiphertext: 'encrypted',
+        encryptionKeyId: 'test',
+      }),
+    });
+    const result = await scenario(user, input);
+    expect(result).toMatchObject({
+      ok: true,
+      catalogLookup: 'UNAVAILABLE',
+      unit: { state: 'QUARANTINE' },
+    });
+    expect(JSON.stringify(result)).not.toContain('sensitive');
+    expect(receive.mock.calls[0]?.[0]).not.toHaveProperty('raw');
   });
 });

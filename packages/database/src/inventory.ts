@@ -9,8 +9,10 @@ import type {
   InventoryVariant,
 } from '@avito/domain';
 import type { Database } from './client.js';
+import { canEnrichIntakeVariant } from '@avito/domain';
 import {
   costLayers,
+  catalogAttributeSources,
   inventoryMovements,
   inventoryOperations,
   inventoryScans,
@@ -25,9 +27,15 @@ import {
 } from './schema.js';
 
 const unitSelect = sql`SELECT u.id, u.internal_code AS "internalCode", u.variant_id AS "variantId", v.name,
+ coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
+ v.color, v.size_label AS size, v.size_system AS "sizeSystem",
+ CASE WHEN v.attributes->'intakeCatalog'->>'status' IN ('RESOLVED','PARTIAL','CONFLICT')
+ THEN v.attributes->'intakeCatalog'->>'status'
+ WHEN v.name LIKE 'Товар %' AND v.review_status='UNRESOLVED' THEN 'UNRESOLVED' ELSE 'MANUAL' END AS "catalogStatus",
  m.masked_code AS "maskedCode", u.current_state AS state, l.name AS location,
  r.id AS "receiptId", r.number AS "receiptNumber", r.received_at AS "receivedAt"
  FROM product_units u JOIN product_variants v ON v.id=u.variant_id
+ LEFT JOIN products p ON p.id=v.product_id
  JOIN cost_layers c ON c.id=u.cost_layer_id JOIN stock_receipt_items ri ON ri.id=c.receipt_item_id
  JOIN stock_receipts r ON r.id=ri.receipt_id
  JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL
@@ -43,7 +51,71 @@ const one = <T>(rows: T[]): T => {
 };
 
 export function createInventoryStore(db: Database) {
+  type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+  const findVariant = async (
+    tx: Pick<Database, 'select'>,
+    gtin: string,
+    lock = false,
+  ) => {
+    const query = tx
+      .select({ identifier: variantIdentifiers, variant: productVariants })
+      .from(variantIdentifiers)
+      .innerJoin(
+        productVariants,
+        eq(productVariants.id, variantIdentifiers.variantId),
+      )
+      .where(eq(variantIdentifiers.gtin, gtin));
+    const [existing] = await (lock ? query.for('update') : query);
+    return existing;
+  };
+  const enrichVariant = async (
+    tx: Transaction,
+    variant: typeof productVariants.$inferSelect,
+    command: ReceiptCommand,
+  ) => {
+    const catalog = command.catalog;
+    if (
+      !catalog ||
+      catalog.gtin !== command.gtin ||
+      !canEnrichIntakeVariant(variant, command.gtin)
+    )
+      return;
+    await tx
+      .update(productVariants)
+      .set({
+        name: catalog.name,
+        color: catalog.color,
+        sizeLabel: catalog.size,
+        sizeSystem: catalog.sizeSystem,
+        materialComposition: catalog.materialComposition,
+        reviewStatus: 'REVIEW_REQUIRED',
+        attributes: {
+          intakeCatalog: {
+            source: 'NATIONAL_CATALOG',
+            sourceReference: catalog.sourceReference,
+            status: catalog.status,
+            article: catalog.article,
+            sourceName: catalog.sourceName,
+            observedAt: catalog.observedAt,
+          },
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(productVariants.id, variant.id));
+    await tx.insert(catalogAttributeSources).values({
+      variantId: variant.id,
+      source: 'NATIONAL_CATALOG',
+      sourceReference: catalog.sourceReference,
+      attributes: { ...catalog },
+      observedAt: new Date(catalog.observedAt),
+      recordedBy: command.actorUserId,
+    });
+  };
   return {
+    async needsCatalogLookup(gtin: string): Promise<boolean> {
+      const existing = await findVariant(db, gtin);
+      return !existing || canEnrichIntakeVariant(existing.variant, gtin);
+    },
     async receive(command: ReceiptCommand): Promise<ReceiptResult> {
       return db.transaction(async (tx) => {
         // Serialize request replay first, then catalog resolution. One GTIN may contain many units.
@@ -61,6 +133,13 @@ export function createInventoryStore(db: Database) {
             replay.scannerProfile !== command.scannerProfile
           )
             return { ok: false, code: 'IDEMPOTENCY_CONFLICT' };
+          if (command.catalog) {
+            await tx.execute(
+              sql`SELECT pg_advisory_xact_lock(hashtextextended(${`receipt-gtin:${command.gtin}`}, 0))`,
+            );
+            const existing = await findVariant(tx, command.gtin, true);
+            if (existing) await enrichVariant(tx, existing.variant, command);
+          }
           const row = one(
             (
               await tx.execute<UnitRow>(
@@ -78,6 +157,7 @@ export function createInventoryStore(db: Database) {
         await tx.execute(
           sql`SELECT pg_advisory_xact_lock(hashtextextended(${`receipt-gtin:${command.gtin}`}, 0))`,
         );
+        const existing = await findVariant(tx, command.gtin, true);
         const [known] = await tx
           .select()
           .from(unitMarkings)
@@ -95,6 +175,7 @@ export function createInventoryStore(db: Database) {
           occurredAt: now,
         };
         if (known) {
+          if (existing) await enrichVariant(tx, existing.variant, command);
           // Existing or retired identity is never received a second time, including sold units.
           const row = one(
             (
@@ -138,14 +219,6 @@ export function createInventoryStore(db: Database) {
             ),
           );
         if (!destination) return { ok: false, code: 'WAREHOUSE_UNAVAILABLE' };
-        const [existing] = await tx
-          .select({ identifier: variantIdentifiers, variant: productVariants })
-          .from(variantIdentifiers)
-          .innerJoin(
-            productVariants,
-            eq(productVariants.id, variantIdentifiers.variantId),
-          )
-          .where(eq(variantIdentifiers.gtin, command.gtin));
         if (
           existing &&
           (existing.variant.archivedAt ||
@@ -154,8 +227,9 @@ export function createInventoryStore(db: Database) {
           return { ok: false, code: 'CATALOG_ARCHIVED' };
         let variantId = existing?.variant.id;
         let identifierId = existing?.identifier.id;
+        if (existing) await enrichVariant(tx, existing.variant, command);
         if (!variantId || !identifierId) {
-          variantId = one(
+          const createdVariant = one(
             await tx
               .insert(productVariants)
               .values({
@@ -164,7 +238,8 @@ export function createInventoryStore(db: Database) {
                 reviewStatus: 'UNRESOLVED',
               })
               .returning(),
-          ).id;
+          );
+          variantId = createdVariant.id;
           identifierId = one(
             await tx
               .insert(variantIdentifiers)
@@ -176,6 +251,7 @@ export function createInventoryStore(db: Database) {
               })
               .returning(),
           ).id;
+          await enrichVariant(tx, createdVariant, command);
         }
         await tx.insert(inventoryOperations).values(op);
         const receiptId = randomUUID();
@@ -299,13 +375,13 @@ export function createInventoryStore(db: Database) {
           const rows = (
             await tx.execute<
               InventoryVariant & Record<string, unknown>
-            >(sql`SELECT v.id, v.product_id AS "productId", p.name AS "productName", p.manufacturer_article AS article,
+            >(sql`SELECT v.id, v.product_id AS "productId", p.name AS "productName", coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
       v.name, v.size_label AS size, v.color, v.review_status AS "reviewStatus",
       ARRAY(SELECT gtin FROM variant_identifiers WHERE variant_id=v.id ORDER BY gtin) AS gtins,
       sum(b.on_hand)::int AS "onHand", sum(b.available)::int AS available, sum(b.quarantine)::int AS quarantine,
       sum(b.reserved)::int AS reserved, sum(b.defective)::int AS defective
       FROM stock_balances b JOIN product_variants v ON v.id=b.variant_id LEFT JOIN products p ON p.id=v.product_id
-      WHERE b.warehouse_id=${warehouse.id} AND (v.name ILIKE ${pattern} OR v.sku ILIKE ${pattern} OR p.name ILIKE ${pattern} OR p.manufacturer_article ILIKE ${pattern} OR v.size_label ILIKE ${pattern} OR v.color ILIKE ${pattern} OR EXISTS(SELECT 1 FROM variant_identifiers vi WHERE vi.variant_id=v.id AND vi.gtin ILIKE ${pattern}))
+      WHERE b.warehouse_id=${warehouse.id} AND (v.name ILIKE ${pattern} OR v.sku ILIKE ${pattern} OR p.name ILIKE ${pattern} OR coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') ILIKE ${pattern} OR v.size_label ILIKE ${pattern} OR v.color ILIKE ${pattern} OR EXISTS(SELECT 1 FROM variant_identifiers vi WHERE vi.variant_id=v.id AND vi.gtin ILIKE ${pattern}))
       GROUP BY v.id,p.id ORDER BY coalesce(p.name,v.name),v.size_label NULLS LAST,v.color NULLS LAST,v.id
       LIMIT ${query.limit + 1} OFFSET ${query.offset}`)
           ).rows;

@@ -4,6 +4,7 @@ import type { ReceiptEntry } from '../composables/useIntake';
 import type { ScanResult } from '../inventory-api';
 import DesignIcon from './DesignIcon.vue';
 import ProductThumbnail from './ProductThumbnail.vue';
+import ReceiptCatalogDetails from './ReceiptCatalogDetails.vue';
 defineProps<{
   entries: ReceiptEntry[];
   acceptedCount: number;
@@ -78,6 +79,7 @@ const time = (value: string) =>
               <ProductThumbnail />
               <div class="min-w-0">
                 <p class="text-title-small">{{ entry.result.unit.name }}</p>
+                <ReceiptCatalogDetails :result="entry.result" />
                 <p class="text-label-small text-muted">
                   {{ entry.result.unit.location ?? 'Зона приёмки' }} · 1 шт.
                 </p>
@@ -120,6 +122,7 @@ const time = (value: string) =>
         ><ProductThumbnail />
         <div class="flex-grow-1 min-w-0">
           <p class="text-title-small">{{ entry.result.unit.name }}</p>
+          <ReceiptCatalogDetails :result="entry.result" />
           <p class="text-body-small text-secondary">
             1 шт. · {{ entry.result.unit.location ?? 'Зона приёмки' }}
           </p>

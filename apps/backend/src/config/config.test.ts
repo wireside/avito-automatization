@@ -11,6 +11,30 @@ const bot = {
   MINI_APP_URL: 'https://app.example.com',
 };
 describe('Telegram runtime configuration', () => {
+  it('keeps National Catalog optional and validates bounded environment/timeouts', () => {
+    expect(readConfig(base).CHZ_NATIONAL_CATALOG_API_KEY).toBeUndefined();
+    expect(
+      readConfig({
+        ...base,
+        CHZ_NATIONAL_CATALOG_API_KEY: '',
+        CHZ_NATIONAL_CATALOG_ENVIRONMENT: 'sandbox',
+        CHZ_NATIONAL_CATALOG_TIMEOUT_MS: '1500',
+      }),
+    ).toMatchObject({
+      CHZ_NATIONAL_CATALOG_API_KEY: undefined,
+      CHZ_NATIONAL_CATALOG_ENVIRONMENT: 'sandbox',
+      CHZ_NATIONAL_CATALOG_TIMEOUT_MS: 1500,
+    });
+    expect(() =>
+      readConfig({ ...base, CHZ_NATIONAL_CATALOG_TIMEOUT_MS: '60000' }),
+    ).toThrow();
+    expect(() =>
+      readConfig({
+        ...base,
+        CHZ_NATIONAL_CATALOG_ENVIRONMENT: 'https://untrusted.example',
+      }),
+    ).toThrow();
+  });
   it('supports health checks without Telegram credentials', () => {
     expect(readConfig(base).TELEGRAM_MODE).toBe('disabled');
   });

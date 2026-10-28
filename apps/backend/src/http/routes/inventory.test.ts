@@ -375,6 +375,44 @@ describe('protected warehouse HTTP API', () => {
     });
     expect(response.body).not.toContain('private-');
   });
+  it('returns saved catalog fields immediately without returning provider payloads', async () => {
+    const { app, persist } = await setup();
+    persist.mockResolvedValue({
+      ok: true,
+      outcome: 'ACCEPTED',
+      replayed: false,
+      catalogLookup: 'FOUND',
+      unit: {
+        ...unit,
+        name: 'Брюки ZZ-8 белый XL',
+        article: 'ZZ-8',
+        color: 'белый',
+        size: 'XL',
+        sizeSystem: 'ЕВРОПА',
+        catalogStatus: 'RESOLVED',
+        ...{ sourceReference: 'private-provider-reference' },
+      },
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/inventory/receipts/scan',
+      headers,
+      payload,
+    });
+    expect(response.statusCode).toBe(201);
+    expect(inventoryScanResponseSchema.parse(response.json())).toMatchObject({
+      catalogLookup: 'FOUND',
+      unit: {
+        name: 'Брюки ZZ-8 белый XL',
+        article: 'ZZ-8',
+        color: 'белый',
+        size: 'XL',
+        catalogStatus: 'RESOLVED',
+      },
+    });
+    expect(response.body).not.toContain('private-provider-reference');
+    expect(response.body).not.toContain(payload.raw);
+  });
   it('masks unexpected exceptions and failed response validation', async () => {
     const { app, persist, list } = await setup();
     persist.mockRejectedValue(

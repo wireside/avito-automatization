@@ -46,6 +46,12 @@ Avito API contracts:
 - Do not invent endpoints or fields that are absent from these contracts. Update the snapshot first when the official API changes.
 - Confirm actual account access with safe probes and sanitized fixtures; a documented endpoint does not guarantee that the account can call it.
 
+CHZ API contracts:
+
+- Start with `docs/chz/README.md` and `docs/openapi/chz/README.md`; source PDF versions and SHA-256 checksums are in `docs/chz/sources/index.json`.
+- The reconstructed Swagger files index the supplied archive, not fully typed official contracts. Check `x-source`, `x-contract-level`, conditional source tables and `docs/chz/source-review.md` before implementing an adapter. Deprecated methods and MDLP authentication are not clothing fallbacks.
+- Keep GTIN catalog enrichment, supplier-document purchase prices, physical intake and legal receipt separate. An API key or a resolved name/size/color does not release quarantine or authorize provider mutations.
+
 Backend layers:
 
 - Keep transport in `apps/backend/src/http`, `telegram`, and `jobs`; call domain scenarios from handlers.

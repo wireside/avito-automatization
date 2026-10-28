@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createDatabaseClient } from './client.js';
 import { createInventoryStore } from './inventory.js';
 import {
@@ -9,7 +9,7 @@ import {
   products,
   variantIdentifiers,
 } from './schema.js';
-import { createReceiveStock } from '@avito/domain';
+import { createReceiveStock, type ReceiptCatalog } from '@avito/domain';
 
 // Run only on an isolated, migrated database. History is append-only; drop the DB afterward.
 const url =
@@ -175,5 +175,206 @@ suite('scanned warehouse receipts in PostgreSQL', () => {
     expect(
       (await store!.list({ search: '', offset: 0, limit: 40 })).totals,
     ).toEqual(before.totals);
+  });
+  const catalog = (gtin: string): ReceiptCatalog => ({
+    gtin,
+    sourceReference: `national-catalog:fixture-${gtin}`,
+    observedAt: '2026-10-27T12:00:00.000Z',
+    status: 'RESOLVED',
+    name: 'Брюки ZZ-8 белый XL',
+    sourceName: 'Брюки арт. ZZ-8 белые XL',
+    article: 'ZZ-8',
+    color: 'белый',
+    size: 'XL',
+    sizeSystem: 'ЕВРОПА',
+    materialComposition: 'Хлопок 100%',
+    attributes: [
+      {
+        id: 35,
+        name: 'Размер одежды / изделия',
+        value: 'XL',
+        valueType: 'ЕВРОПА',
+      },
+    ],
+  });
+  const enrichedReceiver = (gtin: string) => {
+    const lookupCatalog = vi
+      .fn()
+      .mockResolvedValue({ status: 'FOUND', product: catalog(gtin) });
+    return {
+      lookupCatalog,
+      receive: createReceiveStock({
+        receive: (command) => store!.receive(command),
+        protectMarking,
+        needsCatalogLookup: (code) => store!.needsCatalogLookup(code),
+        lookupCatalog,
+      }),
+    };
+  };
+  it('commits readable attributes and provenance with the first unit and reuses them on later receipts', async () => {
+    const gtin = '04660430764604';
+    const enriched = enrichedReceiver(gtin);
+    const result = await enriched.receive(
+      user,
+      scan('0000000000010', randomUUID(), gtin),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      catalogLookup: 'FOUND',
+      unit: {
+        name: 'Брюки ZZ-8 белый XL',
+        article: 'ZZ-8',
+        size: 'XL',
+        color: 'белый',
+        sizeSystem: 'ЕВРОПА',
+        catalogStatus: 'RESOLVED',
+        state: 'QUARANTINE',
+      },
+    });
+    if (!result.ok) throw Error('fixture');
+    await enriched.receive(user, scan('0000000000011', randomUUID(), gtin));
+    expect(enriched.lookupCatalog).toHaveBeenCalledExactlyOnceWith(gtin);
+    const page = await store!.list({ search: gtin, offset: 0, limit: 40 });
+    expect(page.items[0]).toMatchObject({
+      article: 'ZZ-8',
+      name: catalog(gtin).name,
+      size: 'XL',
+      color: 'белый',
+      reviewStatus: 'REVIEW_REQUIRED',
+      productId: null,
+      onHand: 2,
+      available: 0,
+    });
+    expect((await store!.units(result.unit.variantId, 0)).items[0]?.name).toBe(
+      catalog(gtin).name,
+    );
+    const evidence = (
+      await client!.db.execute(
+        sql`SELECT source,attributes FROM catalog_attribute_sources WHERE variant_id=${result.unit.variantId}`,
+      )
+    ).rows;
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0]?.source).toBe('NATIONAL_CATALOG');
+    expect(JSON.stringify(evidence)).not.toContain('encrypted-test-fixture');
+    expect(
+      (await client!.db.execute(sql`SELECT * FROM cost_layer_prices`)).rows,
+    ).toHaveLength(0);
+  });
+  it('enriches an old placeholder on concurrent duplicate scans without receiving another unit', async () => {
+    const gtin = '04660430764611';
+    const original = await receive(
+      user,
+      scan('0000000000012', randomUUID(), gtin),
+    );
+    if (!original.ok) throw Error('fixture');
+    const enriched = enrichedReceiver(gtin);
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        enriched.receive(user, scan('0000000000012', randomUUID(), gtin)),
+      ),
+    );
+    expect(
+      results.every(
+        (result) =>
+          result.ok &&
+          result.outcome === 'DUPLICATE' &&
+          result.unit.name === catalog(gtin).name,
+      ),
+    ).toBe(true);
+    expect(
+      (await store!.list({ search: gtin, offset: 0, limit: 40 })).items[0]
+        ?.onHand,
+    ).toBe(1);
+    expect(
+      (
+        await client!.db.execute(
+          sql`SELECT * FROM inventory_movements WHERE unit_id=${original.unit.id}`,
+        )
+      ).rows,
+    ).toHaveLength(1);
+    expect(
+      (
+        await client!.db.execute(
+          sql`SELECT * FROM catalog_attribute_sources WHERE variant_id=${original.unit.variantId}`,
+        )
+      ).rows,
+    ).toHaveLength(1);
+  });
+  it('can enrich a replay without changing its outcome or stock', async () => {
+    const gtin = '04660430764628';
+    const input = scan('0000000000013', randomUUID(), gtin);
+    await receive(user, input);
+    const enriched = enrichedReceiver(gtin);
+    expect(await enriched.receive(user, input)).toMatchObject({
+      ok: true,
+      replayed: true,
+      outcome: 'ACCEPTED',
+      unit: { name: catalog(gtin).name },
+    });
+    expect(
+      (await store!.list({ search: gtin, offset: 0, limit: 40 })).items[0]
+        ?.onHand,
+    ).toBe(1);
+  });
+  it('does not overwrite a verified/manual mapping even if a lookup raced with a catalog edit', async () => {
+    const gtin = '04660430764550';
+    expect(await store!.needsCatalogLookup(gtin)).toBe(false);
+    const forcedLookup = createReceiveStock({
+      receive: (command) => store!.receive(command),
+      protectMarking,
+      lookupCatalog: () =>
+        Promise.resolve({ status: 'FOUND', product: catalog(gtin) }),
+    });
+    expect(
+      await forcedLookup(user, scan('0000000000014', randomUUID(), gtin)),
+    ).toMatchObject({
+      ok: true,
+      unit: {
+        name: 'Джинсы чёрные M',
+        color: 'Чёрный',
+        size: 'M',
+        article: '208-1',
+        catalogStatus: 'MANUAL',
+      },
+    });
+  });
+  it('accepts missing catalog data explicitly and rolls back new enrichment if receipt persistence fails', async () => {
+    const gtin = '04660430764635';
+    const unavailable = createReceiveStock({
+      receive: (command) => store!.receive(command),
+      protectMarking,
+      lookupCatalog: () => Promise.resolve({ status: 'UNAVAILABLE' }),
+    });
+    const original = await unavailable(
+      user,
+      scan('0000000000015', randomUUID(), gtin),
+    );
+    expect(original).toMatchObject({
+      ok: true,
+      catalogLookup: 'UNAVAILABLE',
+      unit: {
+        name: `Товар ${gtin}`,
+        catalogStatus: 'UNRESOLVED',
+        size: null,
+        color: null,
+        state: 'QUARANTINE',
+      },
+    });
+    const failing = createReceiveStock({
+      receive: (command) => store!.receive(command),
+      protectMarking: (value, identity) => ({
+        ...protectMarking(value, identity),
+        payloadCiphertext: '',
+      }),
+      lookupCatalog: () =>
+        Promise.resolve({ status: 'FOUND', product: catalog(gtin) }),
+    });
+    await expect(
+      failing(user, scan('0000000000016', randomUUID(), gtin)),
+    ).rejects.toThrow();
+    expect(await store!.needsCatalogLookup(gtin)).toBe(true);
+    expect(
+      (await store!.list({ search: gtin, offset: 0, limit: 40 })).items[0],
+    ).toMatchObject({ name: `Товар ${gtin}`, onHand: 1, size: null });
   });
 });

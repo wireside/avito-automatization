@@ -56,6 +56,13 @@ export const inventoryUnitSchema = z.object({
   internalCode: z.string(),
   variantId: z.uuid(),
   name: z.string(),
+  article: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  size: z.string().nullable().optional(),
+  sizeSystem: z.string().nullable().optional(),
+  catalogStatus: z
+    .enum(['UNRESOLVED', 'RESOLVED', 'PARTIAL', 'CONFLICT', 'MANUAL'])
+    .optional(),
   maskedCode: z.string(),
   state: z.string(),
   location: z.string().nullable(),
@@ -84,6 +91,12 @@ export const inventoryScanResponseSchema = z.object({
   outcome: z.enum(['ACCEPTED', 'DUPLICATE']),
   unit: inventoryUnitSchema,
   replayed: z.boolean(),
+  catalogLookup: z
+    .enum(['FOUND', 'NOT_FOUND', 'UNAVAILABLE', 'NOT_CONFIGURED', 'AMBIGUOUS'])
+    .optional()
+    .describe(
+      'Optional catalog lookup result. Lookup failure does not undo physical intake into quarantine.',
+    ),
 });
 export type InventoryScanRequest = z.infer<typeof inventoryScanRequestSchema>;
 export type InventoryListQuery = z.infer<typeof inventoryListQuerySchema>;

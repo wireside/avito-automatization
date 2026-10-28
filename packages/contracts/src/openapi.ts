@@ -176,7 +176,7 @@ export function createPublicApiDocument() {
           tags: ['Inventory'],
           security,
           description:
-            'OWNER, ADMIN and WAREHOUSE. A fresh scan uses a new UUID; a network retry keeps the UUID and exact raw string/profile. Same UUID with another payload returns 409. Another scan of the same GTIN+serial returns DUPLICATE without another movement. The same user scope owns the idempotency UUID. A replay keeps the original outcome and sets replayed=true. Stock reads show the committed result.',
+            'OWNER, ADMIN and WAREHOUSE. A fresh scan uses a new UUID; a network retry keeps the UUID and exact raw string/profile. Same UUID with another payload returns 409. Another scan of the same GTIN+serial returns DUPLICATE without another movement. The same user scope owns the idempotency UUID. A replay keeps the original outcome and sets replayed=true. New/placeholder GTINs are enriched by a bounded read-only National Catalog lookup before persistence. unit includes saved name/article/color/size/catalogStatus; catalogLookup reports an attempted lookup. Missing/conflicting catalog data does not prevent physical receipt into QUARANTINE or imply legal verification. Stock reads show the committed result.',
           requestBody: {
             required: true,
             content: {

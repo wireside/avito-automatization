@@ -1,3 +1,6 @@
+[![CI](https://github.com/wireside/avito-automatization/actions/workflows/ci.yml/badge.svg)](https://github.com/wireside/avito-automatization/actions/workflows/ci.yml)
+[![pages-build-deployment](https://github.com/wireside/avito-automatization/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/wireside/avito-automatization/actions/workflows/pages/pages-build-deployment)
+
 # Avito Automation
 
 Telegram Mini App and a TypeScript modular monolith for safe Avito order, inventory, DataMatrix, return, and operations workflows.
@@ -66,6 +69,26 @@ After the helper reports API readiness, run its printed `VITE_API_BASE_URL=https
 
 Set optional `TELEGRAM_SETUP_CHAT_ID` to the owner's private chat ID to read back that chat's menu after setup. `/start`, `/app` and ordinary text also refresh the current chat menu before replying.
 
+## Chestny ZNAK provider reference
+
+All six PDFs from the user-supplied `API_CHZ.zip` (1881 pages) are preserved with SHA-256 checksums and reviewed for this project in [docs/chz/README.md](docs/chz/README.md). Start with [catalog and receipts](docs/chz/catalog-and-receipts.md) for GTIN-based product names, article, size and color; procurement cost needs a specific supplier document, not a National Catalog card. Lookup must work for each scanned GTIN, not a hardcoded example model. Existing PostgreSQL catalog data is reused across future receipts; scanning does not sign an EDI transfer or release quarantine.
+
+[CHZ Swagger references](docs/openapi/chz/README.md) cover 180 distinct current operations and 18 deprecated routes/variants, with source text, PDF locations and an explicit schema-completeness label. They are reconstructed from PDFs, **not official complete typed contracts**: only 17 operations have additional typed subsets. See [coverage and limitations](docs/chz/source-review.md) before generating clients or implementing an adapter. National Catalog, True API and SUZ have separate credentials; Saby API is not supplied in this archive. Local validation/rebuild instructions do not read `.env` or call provider accounts.
+
+Scanned intake now uses a read-only National Catalog adapter as described below; EDI, True API legal operations and SUZ remain future adapters. The application's own `/api/v1/openapi.json` remains a separate contract.
+
+### Product attributes during scanned intake
+
+Set `CHZ_NATIONAL_CATALOG_API_KEY` once in the existing root `.env` and restart the API. Do not copy `.env.example` over your credentials. `CHZ_NATIONAL_CATALOG_ENVIRONMENT=production` is the default; use `sandbox` only with a sandbox key. Optional `CHZ_NATIONAL_CATALOG_TIMEOUT_MS` is 500..10000 (default 5000). These are server-only settings, never `VITE_*`. This key is not a True API token and does not require a signing USB token for this read-only lookup.
+
+For each scan the API parses that scan's GTIN, resolves a saved variant or reads `GET /v3/product`, matches its consumer-unit identifier, and saves name, manufacturer article, color, size/size system, composition and source evidence in the receipt transaction. The result and receipt journal immediately show the saved attributes, for example `Брюки ZZ-8 белый XL`; no model, size or GTIN is hardcoded. Previously created untouched `Товар <GTIN>` placeholders can be enriched on the next scan, including a duplicate or retry, without another inbound movement. Existing manually filled/verified/mapped/archived cards are not overwritten; repeated receipts use saved metadata without another provider call. Distinct GTINs are not merged into a model by article alone.
+
+The lookup has a bounded timeout/body size, in-flight deduplication, a bounded short-lived cache and quota/429 cooldown. It sends only GTIN, not full DataMatrix/serial/crypto. Missing key, network/provider failure, missing/ambiguous cards or partial/conflicting attributes remain explicit warnings; the physical unit still enters quarantine exactly once. If the title contradicts its structured article, the article is not silently assigned. A new scan can retry an unresolved lookup after the short cooldown. There is no background backfill of all existing stock in this slice.
+
+No schema migration is needed: `product_variants` and append-only `catalog_attribute_sources` already store these attributes and provenance. Enrichment does not provide purchase cost, sign an UPD, check legal ownership, make goods sellable, or call MoySklad/True API/SUZ. Purchase cost remains unknown until a supplier document is connected. The rest of the warehouse/order workflows are unchanged.
+
+The read-only product lookup was checked with the locally configured key on 2026-10-27. This confirms that sample response, not completeness of every card or access to legal operations. Tests also cover provider failures, conflicts, duplicate/replayed scans, atomic persistence on isolated PostgreSQL, and mobile/desktop intake rendering.
+
 ## Backend architecture
 
 All business behavior lives in `packages/domain/src/<feature>`: scenarios, checks, state policies, dependency contracts and colocated tests. Current features are `auth`, `users`, `inventory` and `operations`, exported through `@avito/domain`. There is no backend application layer. Keep new warehouse/order scenarios in domain feature modules; extract separate rule files only for actual reuse.
@@ -90,7 +113,7 @@ The database schema is split into `packages/database/src/schema/` modules, re-ex
 
 `stock_balances` is a SQL view; do not update it. Unit position changes require an `inventory_operations` header and an `inventory_movements` row. Receipts and handovers have deferred consistency checks: post all related units/movements or reservation consumption in one transaction. Unknown cost has no selected price revision, rather than a zero price. See section 11 of `PROJECT_SPEC.md` for table roles, transaction order and current limitations.
 
-Apply committed migrations through `pnpm db:migrate` using an explicitly selected database. The schema and scanned-intake transactions are verified on an isolated PostgreSQL 17 database. Marketplace, EDI and CHZ providers remain disconnected.
+Apply committed migrations through `pnpm db:migrate` using an explicitly selected database. The schema and scanned-intake transactions are verified on an isolated PostgreSQL 17 database. Only read-only National Catalog enrichment is connected; marketplace, EDI and CHZ legal submission remain disconnected.
 
 ## SHTANISHKIN interface
 

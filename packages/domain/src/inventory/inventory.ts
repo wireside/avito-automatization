@@ -1,5 +1,10 @@
 import type { SessionUser } from '../auth/verify-telegram-session.js';
 import { parseClothingMarking, type ScannerProfile } from './parse-marking.js';
+import type {
+  CatalogLookupResult,
+  ReceiptCatalog,
+  ReceiptCatalogStatus,
+} from './receipt-catalog.js';
 
 export interface InventoryQuery {
   search: string;
@@ -33,6 +38,11 @@ export interface InventoryUnit {
   internalCode: string;
   variantId: string;
   name: string;
+  article?: string | null;
+  color?: string | null;
+  size?: string | null;
+  sizeSystem?: string | null;
+  catalogStatus?: ReceiptCatalogStatus;
   maskedCode: string;
   state: string;
   location: string | null;
@@ -51,6 +61,7 @@ export interface ReceiptCommand {
   encryptionKeyId: string;
   parserProfile: string;
   scannerProfile: ScannerProfile;
+  catalog?: ReceiptCatalog;
 }
 export type ReceiptResult =
   | {
@@ -58,6 +69,7 @@ export type ReceiptResult =
       outcome: 'ACCEPTED' | 'DUPLICATE';
       unit: InventoryUnit;
       replayed: boolean;
+      catalogLookup?: CatalogLookupResult['status'];
     }
   | {
       ok: false;
@@ -80,6 +92,8 @@ export const canReadStock = (roles: readonly string[]) =>
   );
 
 export function createReceiveStock(deps: {
+  needsCatalogLookup?: (gtin: string) => Promise<boolean>;
+  lookupCatalog?: (gtin: string) => Promise<CatalogLookupResult>;
   protectMarking?: (
     raw: string,
     identity: string,
@@ -101,15 +115,33 @@ export function createReceiveStock(deps: {
     if (!deps.protectMarking)
       return { ok: false, code: 'MARKING_STORAGE_NOT_CONFIGURED' };
     const { gtin, maskedCode, parserProfile, identity } = parsed.marking;
-    return deps.receive({
+    const protectedMarking = deps.protectMarking(input.raw, identity);
+    let catalog: CatalogLookupResult | undefined;
+    if (
+      deps.lookupCatalog &&
+      (!deps.needsCatalogLookup || (await deps.needsCatalogLookup(gtin)))
+    ) {
+      try {
+        catalog = await deps.lookupCatalog(gtin);
+      } catch {
+        catalog = { status: 'UNAVAILABLE' };
+      }
+    }
+    const result = await deps.receive({
       actorUserId: user.id,
       requestId: input.requestId,
       gtin,
       maskedCode,
       parserProfile,
       scannerProfile: input.scannerProfile,
-      ...deps.protectMarking(input.raw, identity),
+      ...protectedMarking,
+      ...(catalog?.status === 'FOUND' && catalog.product.gtin === gtin
+        ? { catalog: catalog.product }
+        : {}),
     });
+    return result.ok && catalog
+      ? { ...result, catalogLookup: catalog.status }
+      : result;
   };
 }
 export function createReadInventory(deps: {

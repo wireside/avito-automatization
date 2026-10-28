@@ -14,6 +14,14 @@ const unit = {
   receiptNumber: 'SCAN-test',
   receivedAt: '2026-10-20T12:00:00Z',
 };
+const catalogFields = {
+  name: 'Брюки ZZ-8 белый XL',
+  article: 'ZZ-8',
+  color: 'белый',
+  size: 'XL',
+  sizeSystem: 'ЕВРОПА',
+  catalogStatus: 'RESOLVED',
+};
 async function telegram(page: Page, roles = ['OWNER']) {
   await page.route('https://telegram.org/js/telegram-web-app.js*', (route) =>
     route.fulfill({
@@ -55,6 +63,148 @@ function pageData(count: number) {
     hasMore: false,
   };
 }
+for (const width of [390, 1440]) {
+  test(`shows saved catalog attributes immediately and after reload at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await telegram(page);
+    let count = 0;
+    await page.route('**/api/v1/inventory?*', (route) =>
+      route.fulfill({
+        json: {
+          ...pageData(count),
+          items: count
+            ? [
+                {
+                  ...pageData(1).items[0],
+                  ...catalogFields,
+                  reviewStatus: 'REVIEW_REQUIRED',
+                },
+              ]
+            : [],
+        },
+      }),
+    );
+    await page.route('**/api/v1/inventory/receipts/scan', (route) => {
+      count = 1;
+      return route.fulfill({
+        status: 201,
+        json: {
+          ok: true,
+          outcome: 'ACCEPTED',
+          replayed: false,
+          catalogLookup: 'FOUND',
+          unit: { ...unit, ...catalogFields },
+        },
+      });
+    });
+    await page.goto('/');
+    const input = page.getByLabel('USB-сканер или строка DataMatrix');
+    await input.fill(raw);
+    await input.press('Enter');
+    await expect(page.getByTestId('scan-result')).toContainText(
+      catalogFields.name,
+    );
+    await expect(page.getByTestId('scan-result')).toContainText('Арт. ZZ-8');
+    await expect(page.getByTestId('scan-result')).toContainText('Размер XL');
+    await expect(page.getByTestId('catalog-warning')).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath(`catalog-${width}.png`),
+      fullPage: true,
+    });
+    await page.reload();
+    await page.getByRole('tab', { name: 'Остатки', exact: true }).click();
+    await expect(
+      page.getByText(catalogFields.name, { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText('1 шт.', { exact: true }).first(),
+    ).toBeVisible();
+  });
+}
+test('catalog outage still accepts the unit and a later duplicate can display recovered attributes', async ({
+  page,
+}) => {
+  await telegram(page);
+  let calls = 0;
+  await page.route('**/api/v1/inventory?*', (route) =>
+    route.fulfill({ json: pageData(calls ? 1 : 0) }),
+  );
+  await page.route('**/api/v1/inventory/receipts/scan', (route) => {
+    const recovered = calls++ > 0;
+    return route.fulfill({
+      status: recovered ? 200 : 201,
+      json: {
+        ok: true,
+        outcome: recovered ? 'DUPLICATE' : 'ACCEPTED',
+        replayed: false,
+        catalogLookup: recovered ? 'FOUND' : 'UNAVAILABLE',
+        unit: recovered
+          ? { ...unit, ...catalogFields }
+          : { ...unit, catalogStatus: 'UNRESOLVED' },
+      },
+    });
+  });
+  await page.goto('/');
+  const input = page.getByLabel('USB-сканер или строка DataMatrix');
+  await input.fill(raw);
+  await input.press('Enter');
+  await expect(page.getByTestId('scan-result')).toContainText(
+    'Товар добавлен на склад',
+  );
+  await expect(page.getByTestId('scan-result')).toContainText(
+    'Каталог ЧЗ недоступен',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Повторить отправку' }),
+  ).toHaveCount(0);
+  await input.fill(raw);
+  await input.press('Enter');
+  await expect(page.getByTestId('scan-result')).toContainText(
+    'Этот товар уже добавлен',
+  );
+  await expect(page.getByTestId('scan-result')).toContainText(
+    catalogFields.name,
+  );
+  await expect(page.getByTestId('catalog-warning')).toHaveCount(0);
+  await expect(page.getByText('За эту сессию принято: 1')).toBeVisible();
+});
+test('shows conflicting card data as a review warning, not a failed receipt', async ({
+  page,
+}) => {
+  await telegram(page);
+  await page.route('**/api/v1/inventory?*', (route) =>
+    route.fulfill({ json: pageData(0) }),
+  );
+  await page.route('**/api/v1/inventory/receipts/scan', (route) =>
+    route.fulfill({
+      status: 201,
+      json: {
+        ok: true,
+        outcome: 'ACCEPTED',
+        replayed: false,
+        catalogLookup: 'FOUND',
+        unit: {
+          ...unit,
+          ...catalogFields,
+          catalogStatus: 'CONFLICT',
+          article: null,
+        },
+      },
+    }),
+  );
+  await page.goto('/');
+  const input = page.getByLabel('USB-сканер или строка DataMatrix');
+  await input.fill(raw);
+  await input.press('Enter');
+  await expect(page.getByTestId('scan-result')).toContainText(
+    'Товар добавлен на склад',
+  );
+  await expect(page.getByTestId('scan-result')).toContainText(
+    'В карточке ЧЗ есть противоречия',
+  );
+});
 test('USB scan is saved, displayed, deduplicated and remains visible after reload', async ({
   page,
 }, testInfo) => {

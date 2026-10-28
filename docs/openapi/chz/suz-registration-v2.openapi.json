@@ -1,0 +1,109 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CHZ / suz-registration-v2 / archive reference",
+    "version": "2026-10-27",
+    "description": "Reconstructed from user-supplied PDF, NOT an official Swagger export. Complete method index with source documentation; typed schemas cover only explicitly marked subsets, not the entire protocol. No account access or live verification is implied. Default host deliberately cannot execute requests. National Catalog accepts API key OR Bearer, never both. Read linked source tables, group-specific requirements and conflicting examples before implementing an adapter."
+  },
+  "servers": [
+    {
+      "url": "https://example.invalid",
+      "description": "Documentation-only default. Choose an authorized environment explicitly."
+    },
+    {
+      "url": "https://suz-integrator.sandbox.crpt.tech",
+      "description": "Sandbox, separate v2 registration guide"
+    },
+    {
+      "url": "https://suzgrid.crpt.ru:16443",
+      "description": "Production, separate v2 registration guide"
+    }
+  ],
+  "security": [
+    {
+      "RegistrationKey": []
+    }
+  ],
+  "paths": {
+    "/api/v2/integration/connection": {
+      "post": {
+        "operationId": "suz_registration_v2_post_api_v2_integration_connection",
+        "summary": "Запрос регистрации установки экземпляра интеграционного решения",
+        "tags": ["5"],
+        "description": "**Source-documentation operation, not a complete generated-client contract.**\n\n### dynamic-client-token, PDF pp. 11-13, section 5\n\n[Original PDF](/docs/chz/sources/dynamic-client-token.pdf#page=11)\n\n```text\n5. Метод «Запрос регистрации установки экземпляра интеграционногорешения»\nЭтот метод используется для отправки запроса на регистрацию установки экземпляра интеграционного решенияв СУЗ.\nЗапрос регистрации установки экземпляра интеграционного решения должен быть подписан сертификатомучастника оборота товаров.\nУчастник оборота товаров формирует запрос, подписывает его и формирует присоединённую или откреплённуюподпись с использованием сертификата. Присоединённая или откреплённая подпись помещается в HTTPзаголовок в параметр «X-Signature» в кодировке Base64. Для подписи используются данные, помещаемые в телосообщения.\nВ данном разделе под <url стенда> подразумевается базовый адрес стенда, на котором размещено API длярегистрации установки экземпляра интеграционного решения.\nДоступны следующие адреса стендов для отправки запроса регистрации установки экземпляра интеграционногорешения:\nhttps://suz-integrator.sandbox.crpt.tech – базовый адрес демонстрационного контура. Для тестирования надемонстрационном контуре всем участникам доступен следующий код регистрации интеграционного решения— 4344d884-7f21-456c-981e-cd68e92391e8;\nhttps://suzgrid.crpt.ru:16443 – базовый адрес продуктивного контура.\n5.1. Запрос\nURL: <url стенда>/api/v2/integration/connection?omsId=значение идентификатора СУЗ\nМетод: POST\nX-Signature: <Присоединённая или откреплённая подпись запроса>\n[credential/request example omitted]\nContent-type: application/json;charset=UTF-8\nПараметры заголовка запроса:\nПараметр Тип Обяз. Описание Комментарий\nX-Signature string + Присоединённая илиоткреплённая подпись запроса\nContent-type string + Content-type:application/json;charset=UTF-8\nX-RegistrationKey string + Уникальный код регистрацииинтеграционного решения\nПараметры строки запроса:\nПараметр Тип Обяз. Описание Комментарий\nomsId string(UUID) + Уникальный идентификатор СУЗ\nПараметры тела запроса:\nПараметр Тип Обяз. Описание Комментарий\naddress string + Адрес установки экземпляраинтеграционного решения\nname string - Наименование экземпляраинтеграционного решения(внешнего подключения). Недолжно дублироватьнаименованиязарегистрированных уучастника оборота товаровэкземпляров интеграционногорешения (внешнегоподключения)\nЕсли параметр неуказан, то будетсгенерированослучайноенаименование вформате UUID. Длиназначения можетсостоять от 1 до 256символоввключительно\nПример запроса:\n5.2. Ответ\nПри успешном выполнении запроса сервер возвращает HTTP код 200 и статус регистрации установки экземпляраинтеграционного решения.\nПараметры ответа:\nПараметр Тип Обяз. Описание\nstatus string + Статус регистрации установки экземпляраинтеграционного решения.Принимает значения:\nSUCCESS – обработка завершена успешно;\nREJECTED – запрос отклонен\nomsConnection string (UUID) - Уникальный идентификатор соединения(внешнего подключения), присвоенныйзарегистрированной установке интеграционногорешения.\nСодержится в ответе, если status = SUCCESS\nname string - Наименование экземпляра интеграционногорешения (внешнего подключения).\nСодержится в ответе, если status = SUCCESS\nrejectionReason string - Причина отклонения запроса на регистрациюустановки экземпляра интеграционного решения.\nСодержится в ответе, если status = REJECTED\n[credential/request example omitted]\n{    \"address\": \"г.Москва, ул. Тестовая, 1\",    \"name\": \"Наименование\"}\nПримечание: для каждой установки интеграционного решения (omsConnection) доступно получение толькоодного токена, при повторном запросе клиентского токена для установки интеграционного решения(omsConnection) действие ранее полученного токена прекращается и генерируется новый токен.\nПример ответа:\nHTTP/1.1 200 OKContent-Type: application/json;charset=UTF-8\n{    \"status\": \"SUCCESS\",    \"omsConnection\": \"ccc11111-11c1-11c1-1c1c-0000500000c0\",    \"name\": \"Наименование\"}\n```",
+        "parameters": [
+          {
+            "name": "omsId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Signature mode differs between v2 registration and v3 core API. See source."
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "See complete success/error tables in the source below. Unknown response shape is deliberately unrestricted.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-contract-level": "source-documentation",
+        "x-source": [
+          {
+            "document": "dynamic-client-token",
+            "pages": [11, 13],
+            "declarationPage": 11,
+            "section": "5",
+            "title": "Запрос регистрации установки экземпляра интеграционного решения"
+          }
+        ],
+        "x-side-effects": "mutation-or-document-generation",
+        "x-live-verified": false,
+        "security": [
+          {
+            "RegistrationKey": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "TrueApiBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "NationalCatalogApiKey": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "apikey"
+      },
+      "SuzClientToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "clientToken"
+      },
+      "RegistrationKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-RegistrationKey"
+      }
+    }
+  },
+  "x-origin": "Reconstruction of API_CHZ.zip; no credentials; no live calls",
+  "x-source-index": "../../chz/sources/index.json",
+  "x-codegen-ready": false
+}

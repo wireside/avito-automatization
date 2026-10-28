@@ -1,5 +1,6 @@
 import { createDatabaseClient, createInventoryStore } from '@avito/database';
 import { createMarkingProtector } from '../infrastructure/marking-protection.js';
+import { createNationalCatalogLookup } from '../infrastructure/national-catalog.js';
 import { createRedisConnection } from '@avito/queue';
 import type { AppConfig } from '../config/index.js';
 import {
@@ -40,6 +41,14 @@ export async function createApiRuntime(config: AppConfig) {
     readInventory: createReadInventory(inventory),
     receiveStock: createReceiveStock({
       receive: (command) => inventory.receive(command),
+      needsCatalogLookup: (gtin) => inventory.needsCatalogLookup(gtin),
+      lookupCatalog: createNationalCatalogLookup({
+        ...(config.CHZ_NATIONAL_CATALOG_API_KEY
+          ? { apiKey: config.CHZ_NATIONAL_CATALOG_API_KEY }
+          : {}),
+        environment: config.CHZ_NATIONAL_CATALOG_ENVIRONMENT,
+        timeoutMs: config.CHZ_NATIONAL_CATALOG_TIMEOUT_MS,
+      }),
       ...(config.MARKING_ENCRYPTION_KEY
         ? {
             protectMarking: createMarkingProtector(

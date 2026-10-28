@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { ScanResult } from '../inventory-api';
 import DesignIcon from './DesignIcon.vue';
+import ReceiptCatalogDetails from './ReceiptCatalogDetails.vue';
 const props = defineProps<{
   result: ScanResult | undefined;
   processing: boolean;
@@ -20,7 +21,7 @@ const duplicate = computed(() => props.result?.outcome === 'DUPLICATE');
   >
     <v-progress-circular indeterminate color="primary" size="20" width="2" />
     <div>
-      <p class="text-title-small">Добавляем товар…</p>
+      <p class="text-title-small">Распознаём и добавляем товар…</p>
       <p class="text-body-small text-secondary">
         В очереди: {{ queueLength }}. Дождитесь подтверждения.
       </p>
@@ -48,6 +49,7 @@ const duplicate = computed(() => props.result?.outcome === 'DUPLICATE');
       <strong v-if="!duplicate" class="text-label-large">+1</strong>
     </div>
     <p class="text-body-small">{{ result.unit.name }}</p>
+    <ReceiptCatalogDetails :result="result" />
     <p class="text-label-small text-secondary mt-1">
       {{
         duplicate

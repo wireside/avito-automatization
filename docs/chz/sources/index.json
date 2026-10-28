@@ -1,0 +1,68 @@
+{
+  "archive": "API_CHZ.zip",
+  "archiveSha256": "0d19ecd81e048088514ca83619c3e988790313901776f6f86639f02c47532032",
+  "reviewedAt": "2026-10-27",
+  "totalPages": 1881,
+  "documents": [
+    {
+      "id": "suz-api-3.0.40",
+      "archiveEntry": "API_СУЗ_3.0.pdf",
+      "sha256": "0a019c4208f8a781aa431a6a3dad60c537e33f268529e24a0678721022fe1313",
+      "bytes": 4578785,
+      "pages": 761,
+      "version": "API 3.0.40; guide 5.03, revision 67, 2026-09-24",
+      "file": "suz-api-3.0.40.pdf",
+      "textlessPages": []
+    },
+    {
+      "id": "dynamic-client-token",
+      "archiveEntry": "docs.crpt.ru.pdf",
+      "sha256": "1e5d9ebd4a87422cb91c61912fc5f3905cf1f181c8bba2a01d136f3fede9b57c",
+      "bytes": 498859,
+      "pages": 21,
+      "version": "Snapshot supplied by user; no independent version asserted",
+      "file": "dynamic-client-token.pdf",
+      "textlessPages": [2, 6, 8, 10, 14, 18, 20, 21]
+    },
+    {
+      "id": "gismt-api-getting-started",
+      "archiveEntry": "docs.crpt.ru_gismt_Инструкция_по_работе_с_API_.pdf",
+      "sha256": "a6042c50aa31fe7963fe90cc72fbb18f5415adef09044bedd877bb5b6bccbae4",
+      "bytes": 2786780,
+      "pages": 36,
+      "version": "39.0, 2026-08-04",
+      "file": "gismt-api-getting-started.pdf",
+      "textlessPages": [2, 27, 31]
+    },
+    {
+      "id": "true-api-deprecations",
+      "archiveEntry": "docs.crpt.ru2.pdf",
+      "sha256": "ebf566c2045bfe861d413a51c92e3c4947cbdf107db52cdb99424b6b286889dc",
+      "bytes": 36315,
+      "pages": 3,
+      "version": "Snapshot supplied by user; no independent version asserted",
+      "file": "true-api-deprecations.pdf",
+      "textlessPages": []
+    },
+    {
+      "id": "national-catalog-api",
+      "archiveEntry": "docs.crpt.ruНацКаталог.pdf",
+      "sha256": "85fed56d2749231cbf45d9d9a69570c885c51e745eaac43d4731eefb5b63a94b",
+      "bytes": 1103963,
+      "pages": 120,
+      "version": "5.68, 2026-09-28",
+      "file": "national-catalog-api.pdf",
+      "textlessPages": [4, 106, 111]
+    },
+    {
+      "id": "true-api",
+      "archiveEntry": "docs.crpt.ruТруАПИ.pdf",
+      "sha256": "c690e57954116e1437d9c80ca406e09a002386bc984d5dca78d1236f823a0c4c",
+      "bytes": 8611368,
+      "pages": 940,
+      "version": "747.0, 2026-10-21",
+      "file": "true-api.pdf",
+      "textlessPages": [2, 404, 578, 621, 628, 632, 734, 738, 895, 898, 906]
+    }
+  ]
+}
