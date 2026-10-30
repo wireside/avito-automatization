@@ -1,4 +1,4 @@
-[![CI](https://github.com/wireside/avito-automatization/actions/workflows/ci.yml/badge.svg)](https://github.com/wireside/avito-automatization/actions/workflows/ci.yml)
+[![CI/CD](https://github.com/wireside/avito-automatization/actions/workflows/cicd.yml/badge.svg)](https://github.com/wireside/avito-automatization/actions/workflows/cicd.yml)
 [![pages-build-deployment](https://github.com/wireside/avito-automatization/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/wireside/avito-automatization/actions/workflows/pages/pages-build-deployment)
 
 # Avito Automation
@@ -99,7 +99,7 @@ Keep the working `/opt/avito-dev/compose.yaml`, `/opt/avito-dev/compose.override
 
 6. In **Settings → Pages → Build and deployment → Source**, select **GitHub Actions** instead of publishing the `gh-pages` branch. Restrict the `github-pages` environment to `main`. The workflow uses GitHub's built-in token with job-scoped Pages permissions; do not create a PAT. Stop using `npm run deploy` for routine releases after switching to Actions.
 
-7. Commit the intended application code together with `.github/workflows/ci.yml`, `deploy/`, `.dockerignore`, `apps/backend/Dockerfile` and the compiled-migrator configuration in `packages/database/tsconfig.build.json`. Review all existing local changes rather than committing them blindly. Push to `main`, or use **Actions → CI → Run workflow → main**. The default CI workflow must pass before either deployment starts.
+7. Commit the intended application code together with `.github/workflows/cicd.yml`, `deploy/`, `.dockerignore`, `apps/backend/Dockerfile` and the compiled-migrator configuration in `packages/database/tsconfig.build.json`. Review all existing local changes rather than committing them blindly. Push to `main`, or use **Actions → CI/CD → Run workflow → main**. The default CI workflow must pass before either deployment starts.
 
 ### Failure handling and data
 
