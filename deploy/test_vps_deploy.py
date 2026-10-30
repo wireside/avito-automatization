@@ -43,8 +43,14 @@ if a[:2] == ['image', 'rm']: done()
 if a[0] == 'compose':
     b = a[1:]
     if b == ['config', '--quiet']: done()
+    profile = None
+    if b[:1] == ['--profile']:
+        profile, b = b[1], b[2:]
     if b == ['config', '--format', 'json']:
-        done(json.dumps({'services': {n: {'image': 'avito-backend:dev'} for n in ('api','worker','migrate')}}))
+        services = ['api', 'worker']
+        if profile == 'tools' and s['scenario'] != 'missing_migrate':
+            services.append('migrate')
+        done(json.dumps({'services': {n: {'image': 'avito-backend:dev'} for n in services}}))
     if b[:2] == ['ps', '-q']: done(b[-1] + '-id')
     if b[0] == 'exec':
         if 'pg_dump' in b: done('test database dump')
@@ -103,6 +109,15 @@ class DeploymentTests(unittest.TestCase):
         migration = next(i for i,c in enumerate(state['calls']) if c[:3] == ['docker','compose','run'])
         replacement = next(i for i,c in enumerate(state['calls']) if c[:3] == ['docker','compose','up'])
         self.assertLess(migration, replacement)
+
+    def test_missing_migration_service_fails_before_application_changes(self):
+        result, state, backups = self.deploy('missing_migrate')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Missing Compose service: migrate', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+        self.assertEqual((state['api'], state['worker'], state['alias']), ('old', 'old', 'old'))
+        self.assertEqual(backups, 0)
+        self.assertFalse(any(c[:3] == ['docker', 'compose', 'stop'] for c in state['calls']))
 
     def test_failed_migration_leaves_old_api_and_restarts_old_worker(self):
         result, state, backups = self.deploy('migration_failure')

@@ -64,11 +64,14 @@ gzip -dc "$incoming/backend-image.tar.gz" | docker load
 actual_revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")
 [[ $actual_revision == "$revision" ]] || { echo 'Image revision mismatch'; exit 1; }
 # The existing stack must use the deployment alias for these three services.
-compose config --format json | python3 -c '
+# Include the tools profile when inspecting the one-off migration service.
+compose --profile tools config --format json | python3 -c '
 import json, sys
 services = json.load(sys.stdin)["services"]
 for name in ("api", "worker", "migrate"):
-    if services[name]["image"] != "avito-backend:dev":
+    if name not in services:
+        raise SystemExit("Missing Compose service: " + name + " (migration profile: tools)")
+    if services[name].get("image") != "avito-backend:dev":
         raise SystemExit("Expected avito-backend:dev for " + name)
 '
 compose exec -T postgres pg_isready -U avito -d avito
