@@ -55,6 +55,8 @@ const configSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,64}$/)
     .default('local-v1'),
+  AVITO_API_CLIENT_ID: optionalSecret,
+  AVITO_API_CLIENT_SECRET: optionalSecret,
   TELEGRAM_BOT_TOKEN: optionalSecret,
   CHZ_NATIONAL_CATALOG_API_KEY: optionalSecret,
   CHZ_NATIONAL_CATALOG_ENVIRONMENT: z

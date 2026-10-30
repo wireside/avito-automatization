@@ -1,0 +1,95 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Avito Messenger listing photo — verified read subset",
+    "version": "2026-10-30"
+  },
+  "servers": [
+    {
+      "url": "https://api.avito.ru"
+    }
+  ],
+  "x-contract-level": "verified-read-subset-not-full-official-export",
+  "x-source": {
+    "documentation": "https://developers.avito.ru/api-catalog/messenger/documentation",
+    "verifiedAt": "2026-10-30",
+    "verification": "Authenticated GET returned HTTP 200. Only listing context and main-image URL are consumed; chat messages and user data are discarded."
+  },
+  "paths": {
+    "/messenger/v2/accounts/{user_id}/chats/{chat_id}": {
+      "get": {
+        "operationId": "readChatListingPhoto",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified consumed response subset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "context": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "item"
+                          ]
+                        },
+                        "value": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "oneOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "images": {
+                              "type": "object",
+                              "properties": {
+                                "main": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "type": "string",
+                                    "format": "uri"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

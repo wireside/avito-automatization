@@ -18,12 +18,6 @@ import {
 import { users } from './foundation.js';
 import { entityId, recordedAt, timestamps } from './common.js';
 
-export const catalogReviewEnum = pgEnum('catalog_review', [
-  'UNRESOLVED',
-  'REVIEW_REQUIRED',
-  'VERIFIED',
-  'ARCHIVED',
-]);
 export const dataSourceEnum = pgEnum('data_source', [
   'CHZ',
   'NATIONAL_CATALOG',
@@ -108,9 +102,6 @@ export const products = pgTable(
     classificationProfileId: uuid('classification_profile_id').references(
       () => classificationProfiles.id,
     ),
-    reviewStatus: catalogReviewEnum('review_status')
-      .default('UNRESOLVED')
-      .notNull(),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     ...timestamps(),
   },
@@ -143,19 +134,10 @@ export const productVariants = pgTable(
     classificationProfileId: uuid('classification_profile_id').references(
       () => classificationProfiles.id,
     ),
-    reviewStatus: catalogReviewEnum('review_status')
-      .default('UNRESOLVED')
-      .notNull(),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     ...timestamps(),
   },
-  (t) => [
-    index('product_variants_product_idx').on(t.productId),
-    check(
-      'variants_verified_model_check',
-      sql`${t.reviewStatus} <> 'VERIFIED' OR ${t.productId} IS NOT NULL`,
-    ),
-  ],
+  (t) => [index('product_variants_product_idx').on(t.productId)],
 );
 
 export const variantIdentifiers = pgTable(

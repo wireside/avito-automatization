@@ -2,6 +2,24 @@ import type { ApiErrorCode, ApiErrorResponse } from '@avito/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 const failures = {
+  AVITO_NOT_CONFIGURED: [503, 'Доступ к заказам Авито не настроен.'],
+  AVITO_ACCESS_DENIED: [
+    503,
+    'Авито не предоставил доступ к заказам. Проверьте разрешения интеграции.',
+  ],
+  AVITO_UNAVAILABLE: [
+    503,
+    'Не удалось получить заказы Авито. Повторите позже.',
+  ],
+  AVITO_RATE_LIMITED: [
+    429,
+    'Авито ограничил частоту запросов. Повторите позже.',
+  ],
+  ORDER_NOT_FOUND: [404, 'Заказ не найден в Авито.'],
+  ORDER_ACTIONS_DISABLED: [
+    409,
+    'Включён режим просмотра. Подтверждение заказа не отправлено в Авито.',
+  ],
   UNAUTHORIZED: [
     401,
     'Передайте подписанную сессию Telegram в заголовке Authorization.',
@@ -44,6 +62,22 @@ const failures = {
   IDEMPOTENCY_CONFLICT: [
     409,
     'Этот UUID запроса уже использован с другими данными скана.',
+  ],
+  CATALOG_NOT_FOUND: [
+    422,
+    'Товар не найден в Национальном каталоге и не добавлен на склад.',
+  ],
+  CATALOG_UNAVAILABLE: [
+    503,
+    'Национальный каталог недоступен. Товар не добавлен; повторите отправку позже.',
+  ],
+  CATALOG_NOT_CONFIGURED: [
+    503,
+    'На сервере не настроен доступ к Национальному каталогу. Товар не добавлен.',
+  ],
+  CATALOG_AMBIGUOUS: [
+    409,
+    'По GTIN найдено несколько карточек. Товар не добавлен на склад.',
   ],
   CATALOG_ARCHIVED: [409, 'Товар архивирован. Требуется проверка каталога.'],
   WAREHOUSE_UNAVAILABLE: [503, 'Склад или ячейка приёмки недоступны.'],

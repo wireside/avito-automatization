@@ -1,10 +1,6 @@
 import type { SessionUser } from '../auth/verify-telegram-session.js';
 import { parseClothingMarking, type ScannerProfile } from './parse-marking.js';
-import type {
-  CatalogLookupResult,
-  ReceiptCatalog,
-  ReceiptCatalogStatus,
-} from './receipt-catalog.js';
+import type { CatalogLookupResult, ReceiptCatalog } from './receipt-catalog.js';
 
 export interface InventoryQuery {
   search: string;
@@ -20,7 +16,6 @@ export interface InventoryVariant {
   size: string | null;
   color: string | null;
   gtins: string[];
-  reviewStatus: string;
   onHand: number;
   available: number;
   quarantine: number;
@@ -42,7 +37,6 @@ export interface InventoryUnit {
   color?: string | null;
   size?: string | null;
   sizeSystem?: string | null;
-  catalogStatus?: ReceiptCatalogStatus;
   maskedCode: string;
   state: string;
   location: string | null;
@@ -69,12 +63,14 @@ export type ReceiptResult =
       outcome: 'ACCEPTED' | 'DUPLICATE';
       unit: InventoryUnit;
       replayed: boolean;
-      catalogLookup?: CatalogLookupResult['status'];
     }
   | {
       ok: false;
       code:
-        'IDEMPOTENCY_CONFLICT' | 'CATALOG_ARCHIVED' | 'WAREHOUSE_UNAVAILABLE';
+        | 'IDEMPOTENCY_CONFLICT'
+        | 'CATALOG_ARCHIVED'
+        | 'WAREHOUSE_UNAVAILABLE'
+        | 'CATALOG_NOT_FOUND';
     };
 export type InventoryFailure = {
   ok: false;
@@ -82,7 +78,11 @@ export type InventoryFailure = {
     | 'FORBIDDEN'
     | 'INVALID_MARKING'
     | 'INVALID_GTIN'
-    | 'MARKING_STORAGE_NOT_CONFIGURED';
+    | 'MARKING_STORAGE_NOT_CONFIGURED'
+    | 'CATALOG_NOT_CONFIGURED'
+    | 'CATALOG_NOT_FOUND'
+    | 'CATALOG_UNAVAILABLE'
+    | 'CATALOG_AMBIGUOUS';
 };
 export const canReceiveStock = (roles: readonly string[]) =>
   roles.some((role) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(role));
@@ -127,6 +127,11 @@ export function createReceiveStock(deps: {
         catalog = { status: 'UNAVAILABLE' };
       }
     }
+    if (
+      catalog?.status === 'FOUND' &&
+      (catalog.product.gtin !== gtin || !catalog.product.name.trim())
+    )
+      catalog = { status: 'NOT_FOUND' };
     const result = await deps.receive({
       actorUserId: user.id,
       requestId: input.requestId,
@@ -139,9 +144,20 @@ export function createReceiveStock(deps: {
         ? { catalog: catalog.product }
         : {}),
     });
-    return result.ok && catalog
-      ? { ...result, catalogLookup: catalog.status }
-      : result;
+    // Persistence may still resolve a replay, duplicate or a concurrently cached card.
+    // A missing catalog can never create a provisional unit in the transaction.
+    if (!result.ok && result.code === 'CATALOG_NOT_FOUND') {
+      const code =
+        catalog?.status === 'UNAVAILABLE'
+          ? 'CATALOG_UNAVAILABLE'
+          : catalog?.status === 'AMBIGUOUS'
+            ? 'CATALOG_AMBIGUOUS'
+            : !catalog || catalog.status === 'NOT_CONFIGURED'
+              ? 'CATALOG_NOT_CONFIGURED'
+              : 'CATALOG_NOT_FOUND';
+      return { ok: false, code };
+    }
+    return result;
   };
 }
 export function createReadInventory(deps: {

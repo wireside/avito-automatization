@@ -98,21 +98,9 @@ const { mdAndUp } = useDisplay();
           </td>
           <td class="text-title-small">{{ item.onHand }} шт.</td>
           <td>
-            <v-chip
-              :color="item.quarantine ? 'warning-soft' : 'success-soft'"
-              :class="item.quarantine ? 'text-warning' : 'text-success'"
-              >{{
-                item.quarantine
-                  ? `На проверке: ${item.quarantine}`
-                  : `Доступно: ${item.available}`
-              }}</v-chip
+            <v-chip color="success-soft" class="text-success"
+              >Доступно: {{ item.available }}</v-chip
             >
-            <p
-              v-if="item.reviewStatus !== 'VERIFIED'"
-              class="text-label-small text-warning mt-1"
-            >
-              Нужны данные модели
-            </p>
           </td>
           <td>
             <v-btn
@@ -160,21 +148,14 @@ const { mdAndUp } = useDisplay();
           GTIN {{ item.gtins.join(', ') }}
         </p>
         <div class="d-flex ga-3 flex-wrap text-label-small mt-2">
-          <span class="text-warning">На проверке {{ item.quarantine }}</span
-          ><span class="text-success">Доступно {{ item.available }}</span
+          <span class="text-success">Доступно {{ item.available }}</span
           ><span v-if="item.reserved" class="text-secondary"
             >Резерв {{ item.reserved }}</span
           ><span v-if="item.defective" class="text-error"
             >Брак {{ item.defective }}</span
           >
         </div>
-        <p
-          v-if="item.reviewStatus !== 'VERIFIED'"
-          class="text-label-small text-warning mt-2"
-        >
-          Нужны данные карточки товара.
-        </p></v-card
-      ></template
+      </v-card></template
     >
     <nav
       class="d-flex justify-space-between ga-3 pa-md-5 mt-4"

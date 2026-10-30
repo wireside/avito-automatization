@@ -41,7 +41,6 @@ describe('receipt catalog resolution', () => {
         color: 'синий',
         size: 'L',
         sizeSystem: 'ЕВРОПА',
-        status: 'RESOLVED',
         sourceReference: card.sourceReference,
         observedAt,
       },
@@ -107,7 +106,6 @@ describe('receipt catalog resolution', () => {
         article: null,
         color: null,
         size: null,
-        status: 'PARTIAL',
       },
     });
   });
@@ -123,11 +121,10 @@ describe('receipt catalog resolution', () => {
       product: {
         name: 'Брюки арт. AB-78 синие L',
         article: null,
-        status: 'CONFLICT',
       },
     });
   });
-  it('flags conflicting structured values and archived cards', () => {
+  it('preserves unambiguous fields without a human review status', () => {
     expect(
       resolveReceiptCatalog(
         gtin,
@@ -144,7 +141,7 @@ describe('receipt catalog resolution', () => {
       ),
     ).toMatchObject({
       status: 'FOUND',
-      product: { color: null, status: 'CONFLICT' },
+      product: { color: null },
     });
     expect(
       resolveReceiptCatalog(
@@ -152,6 +149,6 @@ describe('receipt catalog resolution', () => {
         [{ ...card, status: 'archived' }],
         observedAt,
       ),
-    ).toMatchObject({ status: 'FOUND', product: { status: 'CONFLICT' } });
+    ).toMatchObject({ status: 'FOUND', product: { name: card.name } });
   });
 });

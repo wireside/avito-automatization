@@ -30,7 +30,7 @@ test('shows modules after server verification', async ({ page }) => {
       .getByRole('navigation', { name: 'Основная навигация' })
       .locator('.v-list-item')
       .filter({ hasText: 'Заказы' }),
-  ).toHaveAttribute('aria-disabled', 'true');
+  ).toHaveAttribute('aria-disabled', 'false');
 });
 
 test('explains missing access and hides modules', async ({ page }) => {

@@ -18,7 +18,7 @@ const units = useQuery({
   retry: false,
 });
 const states: Record<string, string> = {
-  QUARANTINE: 'На проверке',
+  QUARANTINE: 'Карантин',
   AVAILABLE: 'Доступен',
   RESERVED: 'В резерве',
   PACKING: 'Упаковка',

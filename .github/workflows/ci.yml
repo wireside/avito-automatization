@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -8,9 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17-alpine
@@ -39,6 +45,7 @@ jobs:
       DATABASE_URL: postgresql://avito:avito@127.0.0.1:5432/avito
       REDIS_URL: redis://127.0.0.1:6379
       RUN_DATABASE_TESTS: 'true'
+      RUN_INVENTORY_TESTS: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -48,9 +55,147 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - name: Validate VPS deployment scripts
+        run: |
+          bash -n deploy/vps-deploy.sh
+          python3 deploy/test_vps_deploy.py
       - run: pnpm install --frozen-lockfile
       # db:migrate builds database workspace dependencies before loading the schema.
       - run: pnpm db:migrate
       - run: pnpm verify
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+
+  build-backend:
+    name: Build backend image
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.VPS_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image: ${{ steps.image.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Linux amd64 image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="avito-backend:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker build --platform linux/amd64 \
+            --file apps/backend/Dockerfile \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "com.avito.service=backend" \
+            --tag "$image" .
+          echo "tag=$image" >> "$GITHUB_OUTPUT"
+          mkdir -p backend-artifact
+          docker save "$image" | gzip -1 > backend-artifact/backend-image.tar.gz
+          cd backend-artifact
+          sha256sum backend-image.tar.gz > backend-image.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-image
+          path: backend-artifact/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy-backend:
+    name: Deploy backend to development VPS
+    needs: build-backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: vps-development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-image
+          path: backend-artifact
+      - name: Upload and deploy over verified SSH
+        shell: bash
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_USER || 'root' }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          VPS_KNOWN_HOSTS: ${{ vars.VPS_KNOWN_HOSTS }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          IMAGE_TAG: ${{ needs.build-backend.outputs.image }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo 'Set VPS_HOST'; exit 1; }
+          [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || exit 1
+          [[ "$VPS_PORT" =~ ^[0-9]+$ ]] || exit 1
+          [[ -n "$VPS_SSH_KEY" && -n "$VPS_KNOWN_HOSTS" ]] || { echo 'Configure VPS_SSH_KEY and VPS_KNOWN_HOSTS'; exit 1; }
+          ssh_dir="$RUNNER_TEMP/vps-ssh"
+          mkdir -m 700 "$ssh_dir"
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$VPS_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          unset VPS_SSH_KEY
+          ssh-keygen -y -f "$ssh_dir/key" > /dev/null
+          options=(-i "$ssh_dir/key" -o IdentitiesOnly=yes -o BatchMode=yes
+            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts"
+            -o "Port=$VPS_PORT" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          target="$VPS_USER@$VPS_HOST"
+          incoming="/opt/avito-dev/.incoming/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # Expand validated paths on the runner, not on the VPS.
+          # shellcheck disable=SC2029
+          ssh "${options[@]}" "$target" "install -d -m 700 '$incoming'"
+          scp "${options[@]}" backend-artifact/backend-image.tar.gz \
+            backend-artifact/backend-image.tar.gz.sha256 deploy/vps-deploy.sh "$target:$incoming/"
+          # shellcheck disable=SC2029
+          ssh "${options[@]}" "$target" "bash '$incoming/vps-deploy.sh' '$IMAGE_TAG' '$incoming' '$GITHUB_SHA'"
+      - name: Verify public HTTPS API
+        shell: bash
+        env:
+          HEALTH_URL: ${{ vars.VPS_HEALTH_URL || 'https://177-203-58-144.sslip.io/health/ready' }}
+        run: curl --fail --silent --show-error --retry 3 --retry-delay 3 --max-time 15 "$HEALTH_URL"
+
+  build-frontend:
+    name: Build Mini App for GitHub Pages
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.VPS_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+    env:
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://177-203-58-144.sslip.io' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/configure-pages@v5
+      - run: pnpm --filter '@avito/mini-app...' install --frozen-lockfile
+      - run: pnpm --filter '@avito/mini-app^...' build
+      - name: Build with repository Pages base path
+        shell: bash
+        run: pnpm --filter @avito/mini-app run build --base="/${GITHUB_REPOSITORY#*/}/"
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: apps/mini-app/dist
+          retention-days: 1
+
+  deploy-frontend:
+    name: Publish Mini App after backend deployment
+    needs: [build-frontend, deploy-backend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

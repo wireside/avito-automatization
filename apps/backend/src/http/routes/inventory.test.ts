@@ -29,8 +29,8 @@ const unit: InventoryUnit = {
   variantId: '20000000-0000-4000-8000-000000000001',
   name: 'Товар 04660430764543',
   maskedCode: '04660430764543 · •••0001',
-  state: 'QUARANTINE',
-  location: 'Приёмка',
+  state: 'AVAILABLE',
+  location: 'Основное хранение',
   receiptId: '30000000-0000-4000-8000-000000000001',
   receiptNumber: 'SCAN-test',
   receivedAt: '2026-10-20T12:00:00.000Z',
@@ -40,7 +40,7 @@ const page: InventoryPage = {
     id: '40000000-0000-4000-8000-000000000001',
     name: 'Основной склад',
   },
-  totals: { onHand: 1, available: 0, quarantine: 1 },
+  totals: { onHand: 1, available: 1, quarantine: 0 },
   items: [],
   hasMore: false,
 };
@@ -284,6 +284,10 @@ describe('protected warehouse HTTP API', () => {
     ['WAREHOUSE_UNAVAILABLE', 503],
     ['CATALOG_ARCHIVED', 409],
     ['IDEMPOTENCY_CONFLICT', 409],
+    ['CATALOG_NOT_FOUND', 422],
+    ['CATALOG_UNAVAILABLE', 503],
+    ['CATALOG_NOT_CONFIGURED', 503],
+    ['CATALOG_AMBIGUOUS', 409],
   ] as const)('maps domain failure %s to %s', async (code, status) => {
     const receiveStock = vi
       .fn<ReceiveStock>()
@@ -381,7 +385,6 @@ describe('protected warehouse HTTP API', () => {
       ok: true,
       outcome: 'ACCEPTED',
       replayed: false,
-      catalogLookup: 'FOUND',
       unit: {
         ...unit,
         name: 'Брюки ZZ-8 белый XL',
@@ -389,7 +392,6 @@ describe('protected warehouse HTTP API', () => {
         color: 'белый',
         size: 'XL',
         sizeSystem: 'ЕВРОПА',
-        catalogStatus: 'RESOLVED',
         ...{ sourceReference: 'private-provider-reference' },
       },
     });
@@ -401,13 +403,11 @@ describe('protected warehouse HTTP API', () => {
     });
     expect(response.statusCode).toBe(201);
     expect(inventoryScanResponseSchema.parse(response.json())).toMatchObject({
-      catalogLookup: 'FOUND',
       unit: {
         name: 'Брюки ZZ-8 белый XL',
         article: 'ZZ-8',
         color: 'белый',
         size: 'XL',
-        catalogStatus: 'RESOLVED',
       },
     });
     expect(response.body).not.toContain('private-provider-reference');

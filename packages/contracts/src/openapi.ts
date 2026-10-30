@@ -1,3 +1,8 @@
+import {
+  ordersQuerySchema,
+  ordersPageResponseSchema,
+  orderResponseSchema,
+} from './orders.js';
 import { z } from 'zod';
 import {
   apiErrorResponseSchema,
@@ -47,7 +52,7 @@ const authErrors = {
   ),
   '503': jsonResponse(
     'ApiError',
-    'Authentication or inventory service is not configured or destination unavailable.',
+    'Authentication, catalog or inventory service is not configured, provider unavailable, or destination unavailable.',
   ),
 };
 const commonErrors = {
@@ -68,7 +73,7 @@ export function createPublicApiDocument() {
       title: 'Avito warehouse API',
       version: '1.0.0',
       description:
-        'Scanned intake and stock browsing. New receipts enter quarantine. CHZ, EDI and Avito mutations are outside this API slice.',
+        'Read-only live Avito orders, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. CHZ, EDI and Avito mutations are outside this API slice.',
     },
     servers: [{ url: '/', description: 'The origin serving this API.' }],
     components: {
@@ -82,6 +87,8 @@ export function createPublicApiDocument() {
         },
       },
       schemas: {
+        OrdersPageResponse: z.toJSONSchema(ordersPageResponseSchema),
+        OrderResponse: z.toJSONSchema(orderResponseSchema),
         ApiError: z.toJSONSchema(apiErrorResponseSchema),
         TelegramAuthRequest: z.toJSONSchema(telegramAuthRequestSchema),
         TelegramAuthResponse: z.toJSONSchema(telegramAuthResponseSchema),
@@ -93,6 +100,77 @@ export function createPublicApiDocument() {
       },
     },
     paths: {
+      '/api/v1/orders': {
+        get: {
+          operationId: 'listAvitoOrders',
+          summary:
+            'Read a page of live Avito orders. No local intake or reservations.',
+          tags: ['Orders'],
+          security,
+          parameters: queryParameters(ordersQuerySchema),
+          responses: {
+            '200': jsonResponse(
+              'OrdersPageResponse',
+              'Observed live orders, provider pagination, fetch timestamp; mode read_only. Amounts are integer kopecks; missing prices remain null.',
+            ),
+            ...commonErrors,
+            ...authErrors,
+            '429': jsonResponse('ApiError', 'AVITO_RATE_LIMITED. Retry later.'),
+          },
+        },
+      },
+      '/api/v1/orders/{id}': {
+        get: {
+          operationId: 'getAvitoOrder',
+          summary:
+            'Read live order, delivery tracking number, status and provider available actions.',
+          tags: ['Orders'],
+          security,
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', pattern: '^[0-9]{1,32}$' },
+            },
+          ],
+          responses: {
+            '200': jsonResponse(
+              'OrderResponse',
+              'Latest observed provider state, not a locally persisted status history. No carrier tracking URL or detailed events are fabricated.',
+            ),
+            ...commonErrors,
+            ...authErrors,
+            '404': jsonResponse('ApiError', 'ORDER_NOT_FOUND.'),
+            '429': jsonResponse('ApiError', 'AVITO_RATE_LIMITED.'),
+          },
+        },
+      },
+      '/api/v1/orders/{id}/confirm': {
+        post: {
+          operationId: 'confirmAvitoOrderDisabled',
+          summary:
+            'Disabled confirmation placeholder: never sends a provider request.',
+          tags: ['Orders'],
+          security,
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'string', pattern: '^[0-9]{1,32}$' },
+            },
+          ],
+          responses: {
+            ...commonErrors,
+            ...authErrors,
+            '409': jsonResponse(
+              'ApiError',
+              'ORDER_ACTIONS_DISABLED. No state was changed. OWNER, ADMIN, WAREHOUSE only; other roles 403.',
+            ),
+          },
+        },
+      },
       '/api/v1/auth/telegram/verify': {
         post: {
           operationId: 'verifyTelegramSession',
@@ -176,7 +254,7 @@ export function createPublicApiDocument() {
           tags: ['Inventory'],
           security,
           description:
-            'OWNER, ADMIN and WAREHOUSE. A fresh scan uses a new UUID; a network retry keeps the UUID and exact raw string/profile. Same UUID with another payload returns 409. Another scan of the same GTIN+serial returns DUPLICATE without another movement. The same user scope owns the idempotency UUID. A replay keeps the original outcome and sets replayed=true. New/placeholder GTINs are enriched by a bounded read-only National Catalog lookup before persistence. unit includes saved name/article/color/size/catalogStatus; catalogLookup reports an attempted lookup. Missing/conflicting catalog data does not prevent physical receipt into QUARANTINE or imply legal verification. Stock reads show the committed result.',
+            'OWNER, ADMIN and WAREHOUSE. A fresh scan uses a new UUID; a network retry keeps the UUID and exact raw string/profile. Same UUID with another payload returns 409. Another scan of the same GTIN+serial returns DUPLICATE without another movement. The same user scope owns the idempotency UUID. A replay keeps the original outcome and sets replayed=true. Matching National Catalog data for the scanned GTIN is required and reused from stored evidence. A successful receipt immediately enters AVAILABLE with saved attributes; there is no review workflow. Missing/unavailable/ambiguous cards create no provisional unit. Optional missing attributes remain null. This does not fabricate legal CHZ facts. Stock reads show the committed result.',
           requestBody: {
             required: true,
             content: {
@@ -196,7 +274,7 @@ export function createPublicApiDocument() {
             ...authErrors,
             '409': jsonResponse(
               'ApiError',
-              'IDEMPOTENCY_CONFLICT or CATALOG_ARCHIVED.',
+              'IDEMPOTENCY_CONFLICT, CATALOG_ARCHIVED or CATALOG_AMBIGUOUS.',
             ),
             '413': jsonResponse(
               'ApiError',
@@ -208,7 +286,7 @@ export function createPublicApiDocument() {
             ),
             '422': jsonResponse(
               'ApiError',
-              'INVALID_MARKING or INVALID_GTIN. No receipt was created.',
+              'INVALID_MARKING, INVALID_GTIN or CATALOG_NOT_FOUND. No receipt was created.',
             ),
           },
         },

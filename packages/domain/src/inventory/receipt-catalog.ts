@@ -1,11 +1,3 @@
-export const receiptCatalogStatuses = [
-  'UNRESOLVED',
-  'RESOLVED',
-  'PARTIAL',
-  'CONFLICT',
-  'MANUAL',
-] as const;
-export type ReceiptCatalogStatus = (typeof receiptCatalogStatuses)[number];
 export const catalogLookupStatuses = [
   'FOUND',
   'NOT_FOUND',
@@ -30,7 +22,6 @@ export interface ReceiptCatalog {
   gtin: string;
   sourceReference: string;
   observedAt: string;
-  status: 'RESOLVED' | 'PARTIAL' | 'CONFLICT';
   name: string;
   sourceName: string;
   article: string | null;
@@ -155,11 +146,6 @@ export function resolveReceiptCatalog(
       gtin,
       sourceReference: card.sourceReference,
       observedAt,
-      status: conflict
-        ? 'CONFLICT'
-        : article && color && size
-          ? 'RESOLVED'
-          : 'PARTIAL',
       name:
         conflict || !article
           ? sourceName
@@ -180,7 +166,6 @@ export function canEnrichIntakeVariant(
     sku: string;
     name: string;
     productId: string | null;
-    reviewStatus: string;
     archivedAt: Date | null;
     color: string | null;
     sizeLabel: string | null;
@@ -194,7 +179,6 @@ export function canEnrichIntakeVariant(
     variant.sku === `GTIN:${gtin}` &&
     variant.name === `Товар ${gtin}` &&
     variant.productId === null &&
-    variant.reviewStatus === 'UNRESOLVED' &&
     variant.archivedAt === null &&
     variant.color === null &&
     variant.sizeLabel === null &&

@@ -54,7 +54,7 @@ const duplicate = computed(() => props.result?.outcome === 'DUPLICATE');
       {{
         duplicate
           ? 'Повторный скан · остаток не изменён'
-          : `${result.unit.location ?? 'Зона приёмки'} · ожидает проверки`
+          : `${result.unit.location ?? 'Склад'} · добавлен на склад`
       }}
     </p>
     <p class="text-label-small text-secondary">{{ result.unit.maskedCode }}</p>

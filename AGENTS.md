@@ -14,7 +14,7 @@ Core constraints:
 - Treat Chestny ZNAK as the source of truth for the legal state of each CIS.
 - Keep order state, physical inventory state, Avito marking acceptance, CHZ legal state, and CHZ operation progress independent.
 - Model catalog as manufacturer-scoped model → exact color/size/GTIN variant → unique marked unit. Preserve one unit identity across returns and resale; do not group by a name, image, or classification code alone.
-- Prefer per-unit scanned receipt for new marked goods; unresolved identity/legal receipt stays in quarantine. Scanning does not accept an EDI transfer.
+- New per-unit receipts require matching National Catalog data (cached source evidence is reusable) and commit directly to AVAILABLE. Do not reintroduce catalog review/approval or default intake quarantine. Missing/unavailable/ambiguous cards create no new unit. Scanning does not sign an EDI transfer or fabricate legal CHZ facts.
 - Reserve availability at order intake. Packing, shipment, and delivery must not subtract the same unit/reservation twice; confirm Avito stock-write reservation semantics before implementation.
 - Use explicit per-unit shipment preparation and handover. For the verified distance-sale document path, trigger CHZ around dispatch and enforce the legal deadline from dispatch; never wait for buyer receipt as the default trigger.
 - Key CHZ withdrawals by unit and sale cycle so a returned unit can be sold again. Reconcile ambiguous or in-flight documents before compensating.
@@ -50,7 +50,7 @@ CHZ API contracts:
 
 - Start with `docs/chz/README.md` and `docs/openapi/chz/README.md`; source PDF versions and SHA-256 checksums are in `docs/chz/sources/index.json`.
 - The reconstructed Swagger files index the supplied archive, not fully typed official contracts. Check `x-source`, `x-contract-level`, conditional source tables and `docs/chz/source-review.md` before implementing an adapter. Deprecated methods and MDLP authentication are not clothing fallbacks.
-- Keep GTIN catalog enrichment, supplier-document purchase prices, physical intake and legal receipt separate. An API key or a resolved name/size/color does not release quarantine or authorize provider mutations.
+- Keep GTIN catalog enrichment, supplier-document purchase prices, physical intake and legal receipt separate. A matching NK card completes local intake; it does not authorize provider mutations or attest legal ownership. Returns/explicit holds remain independent of initial intake.
 
 Backend layers:
 

@@ -12,15 +12,14 @@ import 'vuetify/styles';
 import './styles/main.scss';
 import App from './App.vue';
 import { vuetify } from './plugins/vuetify';
-import { colors } from './design/tokens';
+import { configureTelegramAppearance } from './design/telegram';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: false, staleTime: 15_000, refetchOnWindowFocus: true },
     mutations: { retry: false },
   },
 });
+configureTelegramAppearance(window.Telegram?.WebApp);
 window.Telegram?.WebApp.ready();
 window.Telegram?.WebApp.expand();
-window.Telegram?.WebApp.setHeaderColor?.(colors.background);
-window.Telegram?.WebApp.setBackgroundColor?.(colors.background);
 createApp(App).use(vuetify).use(VueQueryPlugin, { queryClient }).mount('#root');

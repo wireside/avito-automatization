@@ -22,6 +22,12 @@ export const sessionUserSchema = z.object({
 });
 export const telegramAuthResponseSchema = z.object({ user: sessionUserSchema });
 export const apiErrorCodeSchema = z.enum([
+  'AVITO_NOT_CONFIGURED',
+  'AVITO_ACCESS_DENIED',
+  'AVITO_UNAVAILABLE',
+  'AVITO_RATE_LIMITED',
+  'ORDER_NOT_FOUND',
+  'ORDER_ACTIONS_DISABLED',
   'UNAUTHORIZED',
   'TELEGRAM_NOT_CONFIGURED',
   'MALFORMED',
@@ -42,6 +48,10 @@ export const apiErrorCodeSchema = z.enum([
   'INVALID_GTIN',
   'IDEMPOTENCY_CONFLICT',
   'CATALOG_ARCHIVED',
+  'CATALOG_NOT_FOUND',
+  'CATALOG_UNAVAILABLE',
+  'CATALOG_NOT_CONFIGURED',
+  'CATALOG_AMBIGUOUS',
   'WAREHOUSE_UNAVAILABLE',
 ]);
 export const apiErrorResponseSchema = z.object({

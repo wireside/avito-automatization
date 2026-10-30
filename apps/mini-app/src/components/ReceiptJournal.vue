@@ -90,11 +90,23 @@ const time = (value: string) =>
             {{ entry.result.unit.maskedCode }}
           </td>
           <td>
-            <v-chip color="warning-soft" class="text-warning">{{
-              entry.result.outcome === 'DUPLICATE'
-                ? 'Повторный скан'
-                : 'На проверке'
-            }}</v-chip>
+            <v-chip
+              :color="
+                entry.result.outcome === 'DUPLICATE'
+                  ? 'warning-soft'
+                  : 'success-soft'
+              "
+              :class="
+                entry.result.outcome === 'DUPLICATE'
+                  ? 'text-warning'
+                  : 'text-success'
+              "
+              >{{
+                entry.result.outcome === 'DUPLICATE'
+                  ? 'Повторный скан'
+                  : 'Добавлен на склад'
+              }}</v-chip
+            >
           </td>
           <td class="text-body-small text-secondary">
             {{ time(entry.result.unit.receivedAt) }}
@@ -126,11 +138,11 @@ const time = (value: string) =>
           <p class="text-body-small text-secondary">
             1 шт. · {{ entry.result.unit.location ?? 'Зона приёмки' }}
           </p>
-          <p class="text-label-small text-warning">
+          <p class="text-label-small text-success">
             {{
               entry.result.outcome === 'DUPLICATE'
                 ? 'Уже добавлен'
-                : 'На проверке'
+                : 'Добавлен на склад'
             }}
             · {{ time(entry.result.unit.receivedAt) }}
           </p>

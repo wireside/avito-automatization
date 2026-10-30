@@ -37,7 +37,7 @@ export const vuetify = createVuetify({
       color: 'raised',
       class: 'text-none font-weight-semibold',
     },
-    VCard: { elevation: 0, rounded: 'xl', color: 'surface' },
+    VCard: { elevation: 0, rounded: 'lg', color: 'surface' },
     VSheet: { color: 'transparent' },
     VTextField: {
       variant: 'outlined',
@@ -49,7 +49,7 @@ export const vuetify = createVuetify({
       baseColor: 'muted',
       singleLine: true,
     },
-    VChip: { size: 'small', rounded: 'sm', variant: 'flat' },
+    VChip: { size: 'small', rounded: 'sm', variant: 'flat', class: 'app-chip' },
     VTabs: {
       height: 32,
       hideSlider: true,

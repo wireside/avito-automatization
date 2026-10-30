@@ -12,7 +12,11 @@ import CameraScanner from './CameraScanner.vue';
 import ReceiptJournal from './ReceiptJournal.vue';
 import StockBrowser from './StockBrowser.vue';
 import UnitList from './UnitList.vue';
-const props = defineProps<{ initData: string; roles: string[] }>();
+const props = defineProps<{
+  initData: string;
+  roles: string[];
+  active?: boolean;
+}>();
 const { mdAndUp } = useDisplay();
 const canReceive = computed(() =>
   props.roles.some((role) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(role)),
@@ -45,7 +49,9 @@ const {
   scannerKey,
   pasteScan,
   cameraScan,
-} = useIntake(props.initData, canReceive, () => scanner.value?.focus());
+} = useIntake(props.initData, canReceive, () => {
+  if (props.active !== false) scanner.value?.focus();
+});
 const phoneHelp = ref(false);
 const totals = computed(() => stock.data.value?.totals);
 const metrics = computed(() => [
@@ -66,13 +72,7 @@ const metrics = computed(() => [
       ]
     : []),
   {
-    label: 'На проверке',
-    value: totals.value?.quarantine,
-    color: 'warning',
-    icon: 'clock' as const,
-  },
-  {
-    label: 'Доступно к продаже',
+    label: 'Доступно на складе',
     value: totals.value?.available,
     color: 'success',
     icon: 'check' as const,
@@ -86,11 +86,20 @@ const format = (value: number | undefined) =>
 function selectStock() {
   activeTab.value = 'stock';
 }
+watch(
+  () => props.active,
+  (active) => {
+    if (active === false) cameraOpen.value = false;
+  },
+);
 watch(activeTab, (value) => {
   if (value !== 'intake') cameraOpen.value = false;
 });
 watch(cameraOpen, (value) => {
-  if (!value) void nextTick(() => scanner.value?.focus());
+  if (!value)
+    void nextTick(() => {
+      if (props.active !== false) scanner.value?.focus();
+    });
 });
 </script>
 <template>
@@ -279,8 +288,8 @@ watch(cameraOpen, (value) => {
         <p
           class="d-none d-md-flex align-center ga-2 text-label-small text-muted mt-5"
         >
-          <DesignIcon name="info" />Товар учтён на складе. Допуск к продаже
-          требует проверки товара и документов.
+          <DesignIcon name="info" />Товар добавляется на склад сразу после
+          получения данных из Национального каталога.
         </p>
       </v-sheet>
     </div>

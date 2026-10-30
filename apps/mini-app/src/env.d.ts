@@ -17,6 +17,9 @@ interface Window {
       initData: string;
       ready(): void;
       expand(): void;
+      isVersionAtLeast?(version: string): boolean;
+      onEvent?(event: 'themeChanged' | 'activated', handler: () => void): void;
+      setBottomBarColor?(color: string): void;
       setHeaderColor?(color: string): void;
       setBackgroundColor?(color: string): void;
     };

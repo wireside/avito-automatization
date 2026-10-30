@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useDisplay } from 'vuetify';
+import OrdersView from './components/OrdersView.vue';
 import WarehouseView from './components/WarehouseView.vue';
 import DesignIcon from './components/DesignIcon.vue';
 import { useTelegramSession } from './composables/useTelegramSession';
 import { layout } from './design/tokens';
 const { mdAndUp } = useDisplay();
+const activePage = ref('warehouse');
 const initData = window.Telegram?.WebApp.initData ?? '';
 const session = useTelegramSession(initData);
 const authenticated = computed(() => session.isSuccess.value);
@@ -49,7 +51,7 @@ const navigation = [
     <v-navigation-drawer
       v-if="authenticated && stockAllowed && mdAndUp"
       permanent
-      :width="layout.drawerWidth"
+      :width="activePage === 'orders' ? 216 : layout.drawerWidth"
       color="surface"
       border="0"
       class="pa-5"
@@ -69,21 +71,30 @@ const navigation = [
         ><v-list-item
           v-for="item in navigation"
           :key="item.value"
-          :active="item.value === 'warehouse'"
-          :disabled="item.value !== 'warehouse'"
-          :aria-disabled="item.value !== 'warehouse'"
+          :active="item.value === activePage"
+          :disabled="!['warehouse', 'orders'].includes(item.value)"
+          :aria-disabled="!['warehouse', 'orders'].includes(item.value)"
           :title="item.label"
-          :subtitle="item.value !== 'warehouse' ? 'Скоро' : ''"
-          :color="item.value === 'warehouse' ? 'primary' : 'secondary'"
+          :subtitle="
+            !['warehouse', 'orders'].includes(item.value) ? 'Скоро' : ''
+          "
+          :color="item.value === activePage ? 'primary' : 'secondary'"
           class="mb-2 text-body-medium"
           :class="
-            item.value === 'warehouse'
+            item.value === activePage
               ? 'bg-primary-soft text-primary'
               : 'text-secondary'
           "
+          @click="activePage = item.value"
           ><template #prepend
             ><DesignIcon
-              :name="item.icon"
+              :name="
+                activePage === 'orders' && item.value === 'orders'
+                  ? 'ordersActive'
+                  : activePage === 'orders' && item.value === 'warehouse'
+                    ? 'warehouseInactive'
+                    : item.icon
+              "
               class="mr-3" /></template></v-list-item
       ></v-list>
       <template #append
@@ -115,14 +126,29 @@ const navigation = [
     <v-main id="main-content">
       <v-container
         fluid
-        class="app-content px-6 pt-6 px-md-8 pt-md-8 px-lg-10 pt-lg-10"
+        class="app-content"
+        :class="
+          activePage === 'orders'
+            ? 'px-5 pt-5 px-md-8 pt-md-8'
+            : 'px-6 pt-6 px-md-8 pt-md-8 px-lg-10 pt-lg-10'
+        "
       >
         <WarehouseView
           v-if="authenticated && stockAllowed"
+          v-show="activePage === 'warehouse'"
+          :active="activePage === 'warehouse'"
           :init-data="initData"
           :roles="roles"
         />
-        <v-sheet v-else max-width="520" class="mx-auto mt-8 mt-md-16">
+        <OrdersView
+          v-if="authenticated && stockAllowed && activePage === 'orders'"
+          :init-data="initData"
+        />
+        <v-sheet
+          v-if="!authenticated || !stockAllowed"
+          max-width="520"
+          class="mx-auto mt-8 mt-md-16"
+        >
           <p class="text-title-medium text-primary mb-6">SHTANISHKIN</p>
           <v-card border class="pa-6" aria-live="polite">
             <template v-if="!initData"
@@ -167,7 +193,7 @@ const navigation = [
     </v-main>
     <v-bottom-navigation
       v-if="authenticated && stockAllowed && !mdAndUp"
-      model-value="warehouse"
+      v-model="activePage"
       :height="layout.bottomNavigationHeight"
       grow
       color="primary"
@@ -180,21 +206,34 @@ const navigation = [
         v-for="item in navigation"
         :key="item.value"
         :value="item.value"
-        :disabled="item.value !== 'warehouse'"
-        :aria-disabled="item.value !== 'warehouse'"
+        :disabled="!['warehouse', 'orders'].includes(item.value)"
+        :aria-disabled="!['warehouse', 'orders'].includes(item.value)"
         :min-width="0"
         height="52"
+        width="65"
+        variant="text"
+        :color="item.value === activePage ? 'primary' : 'muted'"
         rounded="md"
         class="px-1 my-3"
         :class="
-          item.value === 'warehouse'
+          item.value === activePage
             ? 'bg-primary-soft text-primary'
             : 'text-muted'
         "
-        :title="item.value === 'warehouse' ? 'Склад' : `${item.label} — скоро`"
-        ><DesignIcon :name="item.icon" /><span class="text-label-small mt-1">{{
-          item.label
-        }}</span></v-btn
+        :title="
+          ['warehouse', 'orders'].includes(item.value)
+            ? item.label
+            : `${item.label} — скоро`
+        "
+        ><DesignIcon
+          :name="
+            activePage === 'orders' && item.value === 'orders'
+              ? 'ordersActive'
+              : activePage === 'orders' && item.value === 'warehouse'
+                ? 'warehouseInactive'
+                : item.icon
+          "
+        /><span class="text-label-small mt-1">{{ item.label }}</span></v-btn
       >
     </v-bottom-navigation>
   </v-app>

@@ -29,9 +29,6 @@ import {
 const unitSelect = sql`SELECT u.id, u.internal_code AS "internalCode", u.variant_id AS "variantId", v.name,
  coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
  v.color, v.size_label AS size, v.size_system AS "sizeSystem",
- CASE WHEN v.attributes->'intakeCatalog'->>'status' IN ('RESOLVED','PARTIAL','CONFLICT')
- THEN v.attributes->'intakeCatalog'->>'status'
- WHEN v.name LIKE 'Товар %' AND v.review_status='UNRESOLVED' THEN 'UNRESOLVED' ELSE 'MANUAL' END AS "catalogStatus",
  m.masked_code AS "maskedCode", u.current_state AS state, l.name AS location,
  r.id AS "receiptId", r.number AS "receiptNumber", r.received_at AS "receivedAt"
  FROM product_units u JOIN product_variants v ON v.id=u.variant_id
@@ -58,7 +55,11 @@ export function createInventoryStore(db: Database) {
     lock = false,
   ) => {
     const query = tx
-      .select({ identifier: variantIdentifiers, variant: productVariants })
+      .select({
+        identifier: variantIdentifiers,
+        variant: productVariants,
+        parentArchived: sql<boolean>`EXISTS (SELECT 1 FROM products p WHERE p.id=${productVariants.productId} AND p.archived_at IS NOT NULL)`,
+      })
       .from(variantIdentifiers)
       .innerJoin(
         productVariants,
@@ -68,53 +69,114 @@ export function createInventoryStore(db: Database) {
     const [existing] = await (lock ? query.for('update') : query);
     return existing;
   };
+  const hasCatalogEvidence = async (
+    tx: Pick<Database, 'execute'>,
+    variantId: string,
+    gtin: string,
+  ) => {
+    const result = await tx.execute<{ found: boolean }>(sql`SELECT EXISTS (
+      SELECT 1 FROM catalog_attribute_sources WHERE variant_id=${variantId}
+        AND source='NATIONAL_CATALOG' AND attributes->>'gtin'=${gtin}
+    ) AS found`);
+    return result.rows[0]?.found === true;
+  };
   const enrichVariant = async (
     tx: Transaction,
     variant: typeof productVariants.$inferSelect,
     command: ReceiptCommand,
   ) => {
     const catalog = command.catalog;
-    if (
-      !catalog ||
-      catalog.gtin !== command.gtin ||
-      !canEnrichIntakeVariant(variant, command.gtin)
-    )
+    if (!catalog || catalog.gtin !== command.gtin || !catalog.name.trim())
       return;
-    await tx
-      .update(productVariants)
-      .set({
-        name: catalog.name,
-        color: catalog.color,
-        sizeLabel: catalog.size,
-        sizeSystem: catalog.sizeSystem,
-        materialComposition: catalog.materialComposition,
-        reviewStatus: 'REVIEW_REQUIRED',
-        attributes: {
-          intakeCatalog: {
-            source: 'NATIONAL_CATALOG',
-            sourceReference: catalog.sourceReference,
-            status: catalog.status,
-            article: catalog.article,
-            sourceName: catalog.sourceName,
-            observedAt: catalog.observedAt,
+    if (canEnrichIntakeVariant(variant, command.gtin)) {
+      await tx
+        .update(productVariants)
+        .set({
+          name: catalog.name,
+          color: catalog.color,
+          sizeLabel: catalog.size,
+          sizeSystem: catalog.sizeSystem,
+          materialComposition: catalog.materialComposition,
+          attributes: {
+            intakeCatalog: {
+              source: 'NATIONAL_CATALOG',
+              sourceReference: catalog.sourceReference,
+              article: catalog.article,
+              sourceName: catalog.sourceName,
+              observedAt: catalog.observedAt,
+            },
           },
-        },
-        updatedAt: new Date(),
-      })
-      .where(eq(productVariants.id, variant.id));
-    await tx.insert(catalogAttributeSources).values({
-      variantId: variant.id,
-      source: 'NATIONAL_CATALOG',
-      sourceReference: catalog.sourceReference,
-      attributes: { ...catalog },
-      observedAt: new Date(catalog.observedAt),
-      recordedBy: command.actorUserId,
+          updatedAt: new Date(),
+        })
+        .where(eq(productVariants.id, variant.id));
+    }
+    // Preserve local/manual labels, but record NK existence for any mapped variant.
+    if (!(await hasCatalogEvidence(tx, variant.id, command.gtin))) {
+      await tx.insert(catalogAttributeSources).values({
+        variantId: variant.id,
+        source: 'NATIONAL_CATALOG',
+        sourceReference: catalog.sourceReference,
+        attributes: { ...catalog },
+        observedAt: new Date(catalog.observedAt),
+        recordedBy: command.actorUserId,
+      });
+    }
+  };
+  const completeLegacyIntake = async (
+    tx: Transaction,
+    unitId: string,
+    command: ReceiptCommand,
+  ) => {
+    // Upgrade only an untouched original receipt, never a return or an explicit hold.
+    const legacy = (
+      await tx.execute<{
+        id: string;
+        locationId: string;
+        targetId: string | null;
+      }>(sql`
+      SELECT u.id, u.current_location_id AS "locationId", target.id AS "targetId"
+      FROM product_units u JOIN stock_locations l ON l.id=u.current_location_id
+      JOIN warehouses w ON w.id=l.warehouse_id
+      JOIN product_variants v ON v.id=u.variant_id LEFT JOIN products p ON p.id=v.product_id
+      LEFT JOIN stock_locations target ON target.warehouse_id=w.id AND target.code='STOCK' AND target.kind='SELLABLE' AND target.archived_at IS NULL
+      JOIN inventory_movements m ON m.unit_id=u.id AND m.unit_revision=1
+      JOIN inventory_operations op ON op.id=m.operation_id
+      WHERE u.id=${unitId} AND u.current_state='QUARANTINE' AND u.movement_revision=1
+        AND l.code='RECEIVING' AND w.archived_at IS NULL AND v.archived_at IS NULL AND (p.id IS NULL OR p.archived_at IS NULL) AND op.kind='RECEIPT' AND op.source='mini-app-intake'
+        AND EXISTS (SELECT 1 FROM catalog_attribute_sources ca WHERE ca.variant_id=u.variant_id AND ca.source='NATIONAL_CATALOG' AND ca.attributes->>'gtin'=${command.gtin})
+      FOR UPDATE OF u`)
+    ).rows[0];
+    if (!legacy) return;
+    if (!legacy.targetId) throw new Error('Intake destination unavailable');
+    const id = randomUUID();
+    await tx.insert(inventoryOperations).values({
+      id,
+      kind: 'CORRECTION',
+      idempotencyKey: `intake-catalog-completion:${unitId}`,
+      actorKind: 'USER',
+      actorUserId: command.actorUserId,
+      source: 'intake-catalog-completion',
+      reason:
+        'Первичная приёмка завершена по данным Национального каталога без этапа проверки',
+      correlationId: command.requestId,
+      occurredAt: new Date(),
+    });
+    await tx.insert(inventoryMovements).values({
+      operationId: id,
+      unitId,
+      unitRevision: 2,
+      fromState: 'QUARANTINE',
+      toState: 'AVAILABLE',
+      fromLocationId: legacy.locationId,
+      toLocationId: legacy.targetId,
     });
   };
   return {
     async needsCatalogLookup(gtin: string): Promise<boolean> {
       const existing = await findVariant(db, gtin);
-      return !existing || canEnrichIntakeVariant(existing.variant, gtin);
+      return (
+        !existing || !(await hasCatalogEvidence(db, existing.variant.id, gtin))
+      );
     },
     async receive(command: ReceiptCommand): Promise<ReceiptResult> {
       return db.transaction(async (tx) => {
@@ -140,6 +202,7 @@ export function createInventoryStore(db: Database) {
             const existing = await findVariant(tx, command.gtin, true);
             if (existing) await enrichVariant(tx, existing.variant, command);
           }
+          await completeLegacyIntake(tx, replay.unitId!, command);
           const row = one(
             (
               await tx.execute<UnitRow>(
@@ -176,6 +239,7 @@ export function createInventoryStore(db: Database) {
         };
         if (known) {
           if (existing) await enrichVariant(tx, existing.variant, command);
+          await completeLegacyIntake(tx, known.unitId, command);
           // Existing or retired identity is never received a second time, including sold units.
           const row = one(
             (
@@ -213,18 +277,25 @@ export function createInventoryStore(db: Database) {
             and(
               eq(warehouses.code, 'MAIN'),
               isNull(warehouses.archivedAt),
-              eq(stockLocations.code, 'RECEIVING'),
-              eq(stockLocations.kind, 'QUARANTINE'),
+              eq(stockLocations.code, 'STOCK'),
+              eq(stockLocations.kind, 'SELLABLE'),
               isNull(stockLocations.archivedAt),
             ),
           );
         if (!destination) return { ok: false, code: 'WAREHOUSE_UNAVAILABLE' };
         if (
           existing &&
-          (existing.variant.archivedAt ||
-            existing.variant.reviewStatus === 'ARCHIVED')
+          (existing.variant.archivedAt || existing.parentArchived)
         )
           return { ok: false, code: 'CATALOG_ARCHIVED' };
+        const suppliedCatalog =
+          command.catalog?.gtin === command.gtin && command.catalog.name.trim();
+        if (
+          !suppliedCatalog &&
+          (!existing ||
+            !(await hasCatalogEvidence(tx, existing.variant.id, command.gtin)))
+        )
+          return { ok: false, code: 'CATALOG_NOT_FOUND' };
         let variantId = existing?.variant.id;
         let identifierId = existing?.identifier.id;
         if (existing) await enrichVariant(tx, existing.variant, command);
@@ -235,7 +306,6 @@ export function createInventoryStore(db: Database) {
               .values({
                 sku: `GTIN:${command.gtin}`,
                 name: `Товар ${command.gtin}`,
-                reviewStatus: 'UNRESOLVED',
               })
               .returning(),
           );
@@ -325,7 +395,7 @@ export function createInventoryStore(db: Database) {
           unitId: unit.id,
           unitRevision: 1,
           fromState: 'NOT_RECEIVED',
-          toState: 'QUARANTINE',
+          toState: 'AVAILABLE',
           toLocationId: destination.locationId,
         });
         await tx.insert(inventoryScans).values({
@@ -376,7 +446,7 @@ export function createInventoryStore(db: Database) {
             await tx.execute<
               InventoryVariant & Record<string, unknown>
             >(sql`SELECT v.id, v.product_id AS "productId", p.name AS "productName", coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
-      v.name, v.size_label AS size, v.color, v.review_status AS "reviewStatus",
+      v.name, v.size_label AS size, v.color,
       ARRAY(SELECT gtin FROM variant_identifiers WHERE variant_id=v.id ORDER BY gtin) AS gtins,
       sum(b.on_hand)::int AS "onHand", sum(b.available)::int AS available, sum(b.quarantine)::int AS quarantine,
       sum(b.reserved)::int AS reserved, sum(b.defective)::int AS defective

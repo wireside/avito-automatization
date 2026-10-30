@@ -20,6 +20,7 @@ export const colors = {
   'on-primary-strong': '#FFFFFF',
   secondary: '#A1A1AA',
   muted: '#73737D',
+  'muted-soft': '#1C1C1F',
 } as const;
 export const layout = {
   drawerWidth: 240,

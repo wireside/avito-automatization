@@ -7,5 +7,5 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "exclude": ["drizzle.config.ts", "src/**/*.test.ts", "src/migrate.ts"]
+  "exclude": ["drizzle.config.ts", "src/**/*.test.ts"]
 }

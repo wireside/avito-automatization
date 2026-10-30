@@ -70,3 +70,13 @@ button:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Selected design surfaces already contain their highlight color. */
+.mobile-navigation .v-btn--active > .v-btn__overlay,
+.v-navigation-drawer .v-list-item--active > .v-list-item__overlay {
+  opacity: 0;
+}
+
+.app-chip.v-chip {
+  height: 34px;
+}

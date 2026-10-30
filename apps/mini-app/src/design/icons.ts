@@ -1,3 +1,5 @@
+import ordersActive from '../assets/figma/orders-active.svg';
+import warehouseInactive from '../assets/figma/orders-warehouse.svg';
 import home from '../assets/figma/mobile-bf55f.svg';
 import orders from '../assets/figma/mobile-143fd.svg';
 import warehouse from '../assets/figma/mobile-b354c.svg';
@@ -22,6 +24,8 @@ import close from '../assets/figma/camera-536a4.svg';
 import flash from '../assets/figma/camera-f5bdd.svg';
 
 export const icons = {
+  ordersActive: { src: ordersActive, width: 20, height: 20 },
+  warehouseInactive: { src: warehouseInactive, width: 20, height: 20 },
   home: { src: home, width: 20, height: 20 },
   orders: { src: orders, width: 20, height: 20 },
   warehouse: { src: warehouse, width: 20, height: 20 },

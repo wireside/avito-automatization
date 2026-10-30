@@ -1,11 +1,14 @@
 import { createDatabaseClient, createInventoryStore } from '@avito/database';
 import { createMarkingProtector } from '../infrastructure/marking-protection.js';
+import { createAvitoReadLimiter } from '../infrastructure/avito-read-limiter.js';
+import { createAvitoOrderReader } from '../infrastructure/avito-orders.js';
 import { createNationalCatalogLookup } from '../infrastructure/national-catalog.js';
 import { createRedisConnection } from '@avito/queue';
 import type { AppConfig } from '../config/index.js';
 import {
   createVerifyTelegramSession,
   createReadInventory,
+  createReadOrders,
   createReceiveStock,
 } from '@avito/domain';
 import { createUserAccessStore } from '../infrastructure/persistence.js';
@@ -38,6 +41,16 @@ export async function createApiRuntime(config: AppConfig) {
         })
       : undefined;
   const app = await buildApp(config, {
+    readOrders: createReadOrders(
+      createAvitoOrderReader({
+        clientId: config.AVITO_API_CLIENT_ID,
+        clientSecret: config.AVITO_API_CLIENT_SECRET,
+        acquireReadSlot: createAvitoReadLimiter(
+          redis,
+          config.AVITO_API_CLIENT_ID ?? 'unconfigured',
+        ),
+      }),
+    ),
     readInventory: createReadInventory(inventory),
     receiveStock: createReceiveStock({
       receive: (command) => inventory.receive(command),
