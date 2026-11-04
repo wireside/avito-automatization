@@ -132,7 +132,7 @@ for (const width of [430, 1512]) {
     if (width < 960) {
       const number = page
         .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
-        .locator('.v-btn__content');
+        .locator('.order-number');
       expect(
         await number.evaluate(
           (element) =>
@@ -288,4 +288,53 @@ test('shows the listing photo and falls back without breaking order navigation',
   await expect(
     page.locator('img[data-illustration="denim"]').first(),
   ).toBeVisible();
+});
+
+for (const width of [320, 390, 430]) {
+  test(`entire card opens from product and keyboard at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 932 });
+    const writes = await setup(page);
+    const card = page.getByRole('button', {
+      name: `Открыть заказ ${firstId}`,
+      exact: true,
+    });
+    await expect(card.locator('button')).toHaveCount(0);
+    await card.getByText('Джинсы прямые', { exact: true }).click();
+    await expect(page.getByTestId('order-tracking')).toBeVisible();
+    await page.getByRole('button', { name: '← Заказы', exact: true }).click();
+    await card.focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByTestId('order-tracking')).toBeVisible();
+    await page.getByRole('button', { name: '← Заказы', exact: true }).click();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect(
+      await page
+        .locator('.v-application')
+        .evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe('rgb(5, 6, 7)');
+    await page.screenshot({
+      path: `/tmp/avito-redesign-${width}.png`,
+      fullPage: true,
+    });
+    expect(writes).toEqual([]);
+  });
+}
+test('desktop row opens by clicking product and with Enter', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await setup(page);
+  const row = page.locator(`[data-order-id="${firstId}"]`);
+  await row.getByText('Джинсы прямые', { exact: true }).click();
+  await expect(page.getByTestId('order-tracking')).toBeVisible();
+  await page.getByRole('button', { name: '← Заказы', exact: true }).click();
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('order-tracking')).toBeVisible();
 });

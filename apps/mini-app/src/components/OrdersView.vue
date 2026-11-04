@@ -103,7 +103,9 @@ const actionNames: Record<string, string> = {
       </div>
       <v-btn
         :icon="mdiRefresh"
-        size="36"
+        size="44"
+        height="44"
+        width="44"
         variant="text"
         color="secondary"
         aria-label="Обновить заказы"
@@ -196,8 +198,8 @@ const actionNames: Record<string, string> = {
           Данные на текущей странице
         </p>
         <v-chip
-          color="warning-soft"
-          class="text-warning"
+          color="raised"
+          class="text-secondary flex-shrink-0"
           title="Подтверждение, сборка и маркировка недоступны. Заказы Авито и склад не изменяются."
           >Только просмотр</v-chip
         >
@@ -219,7 +221,17 @@ const actionNames: Record<string, string> = {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="o in visibleOrders" :key="o.id" :data-order-id="o.id">
+            <tr
+              v-for="o in visibleOrders"
+              :key="o.id"
+              :data-order-id="o.id"
+              class="order-row"
+              tabindex="0"
+              :aria-label="`Заказ ${o.id}`"
+              @click="selectedId = o.id"
+              @keydown.enter.prevent="selectedId = o.id"
+              @keydown.space.prevent="selectedId = o.id"
+            >
               <td>
                 <p class="text-label-large orders-wrap">
                   {{ orderNumber(o.id) }}
@@ -264,7 +276,7 @@ const actionNames: Record<string, string> = {
                 <v-btn
                   width="160"
                   :aria-label="`Открыть заказ ${o.id}`"
-                  @click="selectedId = o.id"
+                  @click.stop="selectedId = o.id"
                   >Открыть заказ</v-btn
                 >
               </td>
@@ -276,19 +288,18 @@ const actionNames: Record<string, string> = {
         <v-card
           v-for="o in visibleOrders"
           :key="o.id"
-          class="pa-4"
+          tag="button"
+          type="button"
+          class="pa-4 order-card text-left"
           rounded="lg"
           :data-order-id="o.id"
+          :aria-label="`Открыть заказ ${o.id}`"
+          @click="selectedId = o.id"
         >
-          <div class="d-flex align-center ga-3 mb-3">
-            <v-btn
-              variant="text"
-              color="on-surface"
-              class="px-0 order-number min-w-0"
-              height="auto"
-              :aria-label="`Открыть заказ ${o.id}`"
-              @click="selectedId = o.id"
-              >{{ orderNumber(o.id) }}</v-btn
+          <div class="d-flex align-start ga-3 mb-3">
+            <span class="text-label-large order-number min-w-0">{{
+              orderNumber(o.id)
+            }}</span
             ><span class="text-label-large flex-shrink-0 text-no-wrap">{{
               amount(o.priceMinor)
             }}</span>
@@ -332,10 +343,14 @@ const actionNames: Record<string, string> = {
         }}</v-card
       >
       <div class="d-flex justify-space-between align-center ga-3 mt-5">
-        <v-btn :disabled="page === 1 || orders.isFetching.value" @click="page--"
+        <v-btn
+          height="44"
+          :disabled="page === 1 || orders.isFetching.value"
+          @click="page--"
           >Назад</v-btn
         ><span class="text-body-small text-secondary">Страница {{ page }}</span
         ><v-btn
+          height="44"
           :disabled="
             !orders.data.value?.hasMore ||
             orders.isFetching.value ||
@@ -483,11 +498,33 @@ const actionNames: Record<string, string> = {
   white-space: normal;
   text-align: left;
 }
-.order-number :deep(.v-btn__content) {
+.order-card {
   display: block;
-  white-space: normal;
+  width: 100%;
+  border: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.order-card:hover,
+.order-row:hover {
+  background-color: rgb(var(--v-theme-raised));
+}
+.order-card:focus-visible,
+.order-row:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 3px;
+}
+.order-row {
+  cursor: pointer;
+}
+.order-number {
   overflow-wrap: anywhere;
-  max-width: 100%;
+}
+.order-card :deep(.v-card__overlay),
+.order-card :deep(.v-card__underlay) {
+  display: none;
 }
 .orders-search :deep(.v-field) {
   --v-input-control-height: 44px;
