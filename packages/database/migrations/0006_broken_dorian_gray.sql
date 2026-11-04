@@ -1,0 +1,1 @@
+ALTER TABLE "marking_command_results" ADD CONSTRAINT "marking_commands_actor_request_uq" UNIQUE("actor_id","request_id");

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { nextTick, ref, type ComponentPublicInstance } from 'vue';
+import { nextTick, ref, useId, type ComponentPublicInstance } from 'vue';
 import { useDisplay } from 'vuetify';
 import DesignIcon from './DesignIcon.vue';
 const raw = defineModel<string>({ required: true });
-defineProps<{ disabled: boolean; cameraOpen: boolean }>();
+defineProps<{ disabled: boolean; cameraOpen: boolean; purpose?: 'pack' }>();
+const titleId = useId();
 const emit = defineEmits<{
   submit: [];
   camera: [];
@@ -23,13 +24,11 @@ function focus() {
 defineExpose({ focus });
 </script>
 <template>
-  <v-card
-    :border="!mdAndUp"
-    class="pa-4 pa-md-5"
-    aria-labelledby="intake-title"
-  >
-    <h2 id="intake-title" class="text-title-medium d-flex align-center ga-2">
-      <DesignIcon :name="mdAndUp ? 'scanDesktop' : 'scan'" />Добавить товар
+  <v-card :border="!mdAndUp" class="pa-4 pa-md-5" :aria-labelledby="titleId">
+    <h2 :id="titleId" class="text-title-medium d-flex align-center ga-2">
+      <DesignIcon :name="mdAndUp ? 'scanDesktop' : 'scan'" />{{
+        purpose === 'pack' ? 'Сканировать для упаковки' : 'Добавить товар'
+      }}
     </h2>
     <p class="text-body-small text-secondary mt-3 mb-4">
       Сканируйте код «Честного знака»
@@ -73,7 +72,9 @@ defineExpose({ focus });
         block
         color="primary-strong"
         class="mt-3"
-        >Добавить со сканера</v-btn
+        >{{
+          purpose === 'pack' ? 'Назначить вещь' : 'Добавить со сканера'
+        }}</v-btn
       >
     </form>
     <v-btn
@@ -85,7 +86,11 @@ defineExpose({ focus });
       ><DesignIcon name="phone" class="mr-2" />Сканировать телефоном</v-btn
     >
     <p v-if="mdAndUp" class="text-body-small text-muted mt-4">
-      Один скан — одна вещь. Подтверждение появится после сохранения на складе.
+      {{
+        purpose === 'pack'
+          ? 'Назначаем уже принятую вещь этой посылке. Остаток не увеличивается.'
+          : 'Один скан — одна вещь. Подтверждение появится после сохранения на складе.'
+      }}
     </p>
   </v-card>
 </template>

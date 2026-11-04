@@ -36,6 +36,41 @@
       "when": 1793306664271,
       "tag": "0004_intake_without_review",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793797120252,
+      "tag": "0005_vengeful_starfox",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793797239576,
+      "tag": "0006_broken_dorian_gray",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793797626901,
+      "tag": "0007_common_azazel",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793798101950,
+      "tag": "0008_previous_skullbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793798540773,
+      "tag": "0009_gigantic_juggernaut",
+      "breakpoints": true
     }
   ]
 }

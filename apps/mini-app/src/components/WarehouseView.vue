@@ -342,6 +342,7 @@ watch(cameraOpen, (value) => {
         <UnitList
           v-if="expanded"
           :key="expanded"
+          :roles="roles"
           :variant-id="expanded"
           :init-data="initData" /></v-card
     ></v-dialog>

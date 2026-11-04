@@ -1,3 +1,9 @@
+import {
+  createMarkingProtector,
+  createMarkingUnprotector,
+} from '../infrastructure/marking-protection.js';
+import { createMarkingPipelineStore } from '@avito/database';
+import { createMarkingPipeline, executeSystemOperation } from '@avito/domain';
 import { createDatabaseClient } from '@avito/database';
 import { createLogger } from '@avito/observability';
 import {
@@ -21,11 +27,33 @@ export function createWorkerRuntime(config: AppConfig) {
   const workerConnection = createRedisConnection(config.REDIS_URL);
   const queue = createIntegrationQueue(queueConnection);
   const store = createOperationStore(database);
+  const pipeline = createMarkingPipeline(
+    createMarkingPipelineStore(
+      database.db,
+      config.MARKING_ENCRYPTION_KEY
+        ? {
+            encrypt: createMarkingProtector(
+              config.MARKING_ENCRYPTION_KEY,
+              config.MARKING_ENCRYPTION_KEY_ID,
+            ),
+            decrypt: createMarkingUnprotector(
+              config.MARKING_ENCRYPTION_KEY,
+              config.MARKING_ENCRYPTION_KEY_ID,
+            ),
+          }
+        : undefined,
+    ),
+    config.MARKING_PIPELINE_MODE,
+  );
   const worker = createIntegrationWorker(
     workerConnection,
     createProcessIntegrationOperation({
       store,
       retryDelay: calculateRetryDelay,
+      execute: (operation) =>
+        operation.operationType.startsWith('pipeline.')
+          ? pipeline.execute(operation.id)
+          : executeSystemOperation(operation),
     }),
   );
   worker.on('completed', (job) =>
@@ -58,11 +86,13 @@ export function createWorkerRuntime(config: AppConfig) {
   return {
     logger,
     async start() {
+      await pipeline.reconcile();
       await recoverOperations();
       recoveryTimer = setInterval(() => {
-        void recoverOperations().catch(() =>
-          logger.error('Durable operation recovery failed'),
-        );
+        void pipeline
+          .reconcile()
+          .then(recoverOperations)
+          .catch(() => logger.error('Durable operation recovery failed'));
       }, 30_000);
       recoveryTimer.unref();
       logger.info('Integration worker started');

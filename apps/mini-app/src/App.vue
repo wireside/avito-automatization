@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, defineAsyncComponent } from 'vue';
 import { useDisplay } from 'vuetify';
 import OrdersView from './components/OrdersView.vue';
 import WarehouseView from './components/WarehouseView.vue';
 import DesignIcon from './components/DesignIcon.vue';
 import { useTelegramSession } from './composables/useTelegramSession';
+import type { DesignIconName } from './design/icons';
 import { layout } from './design/tokens';
+const MarkingPipelineView = defineAsyncComponent(
+  () => import('./components/marking/MarkingPipelineView.vue'),
+);
 const { mdAndUp } = useDisplay();
 const activePage = ref('warehouse');
 const initData = window.Telegram?.WebApp.initData ?? '';
@@ -35,13 +39,23 @@ const roleNames: Record<string, string> = {
   ACCOUNTANT: 'Бухгалтер',
   VIEWER: 'Просмотр',
 };
-const navigation = [
-  { label: 'Главная', icon: 'home', value: 'home' },
-  { label: 'Заказы', icon: 'orders', value: 'orders' },
-  { label: 'Склад', icon: 'warehouse', value: 'warehouse' },
-  { label: 'Финансы', icon: 'finance', value: 'finance' },
-  { label: 'Команда', icon: 'team', value: 'team' },
-] as const;
+const owner = computed(() =>
+  roles.value.some((r) => ['OWNER', 'ADMIN'].includes(r)),
+);
+const navigation = computed<
+  readonly { label: string; icon: DesignIconName; value: string }[]
+>(
+  () =>
+    [
+      { label: 'Заказы', icon: 'orders', value: 'orders' },
+      { label: 'Упаковка', icon: 'warehouseSmall', value: 'packing' },
+      { label: 'Склад', icon: 'warehouse', value: 'warehouse' },
+      { label: 'Проблемы', icon: 'info', value: 'issues' },
+      ...(owner.value
+        ? [{ label: 'Настройки', icon: 'team' as const, value: 'settings' }]
+        : []),
+    ] as const,
+);
 </script>
 <template>
   <v-app>
@@ -72,12 +86,10 @@ const navigation = [
           v-for="item in navigation"
           :key="item.value"
           :active="item.value === activePage"
-          :disabled="!['warehouse', 'orders'].includes(item.value)"
-          :aria-disabled="!['warehouse', 'orders'].includes(item.value)"
+          :disabled="false"
+          :aria-disabled="false"
           :title="item.label"
-          :subtitle="
-            !['warehouse', 'orders'].includes(item.value) ? 'Скоро' : ''
-          "
+          :subtitle="false ? 'Скоро' : ''"
           :color="item.value === activePage ? 'primary' : 'secondary'"
           class="mb-2 text-body-medium"
           :class="
@@ -144,6 +156,16 @@ const navigation = [
           v-if="authenticated && stockAllowed && activePage === 'orders'"
           :init-data="initData"
         />
+        <MarkingPipelineView
+          v-if="authenticated && stockAllowed"
+          v-show="['packing', 'issues', 'settings'].includes(activePage)"
+          :key="'marking'"
+          :init-data="initData"
+          :roles="roles"
+          :active="['packing', 'issues', 'settings'].includes(activePage)"
+          :view="activePage"
+          @navigate="activePage = $event"
+        />
         <v-sheet
           v-if="!authenticated || !stockAllowed"
           max-width="520"
@@ -206,8 +228,8 @@ const navigation = [
         v-for="item in navigation"
         :key="item.value"
         :value="item.value"
-        :disabled="!['warehouse', 'orders'].includes(item.value)"
-        :aria-disabled="!['warehouse', 'orders'].includes(item.value)"
+        :disabled="false"
+        :aria-disabled="false"
         :min-width="0"
         height="52"
         width="65"
@@ -220,11 +242,7 @@ const navigation = [
             ? 'bg-primary-soft text-primary'
             : 'text-muted'
         "
-        :title="
-          ['warehouse', 'orders'].includes(item.value)
-            ? item.label
-            : `${item.label} — скоро`
-        "
+        :title="true ? item.label : `${item.label} — скоро`"
         ><DesignIcon
           :name="
             activePage === 'orders' && item.value === 'orders'

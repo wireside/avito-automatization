@@ -16,6 +16,7 @@ const optionalSecret = z.preprocess(
 );
 
 const configSchema = z.object({
+  MARKING_PIPELINE_MODE: z.enum(['disabled', 'simulation']).default('disabled'),
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .default('development'),
@@ -55,6 +56,10 @@ const configSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,64}$/)
     .default('local-v1'),
+  LOCAL_SIGNER_TOKEN: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(32).max(512).optional(),
+  ),
   AVITO_API_CLIENT_ID: optionalSecret,
   AVITO_API_CLIENT_SECRET: optionalSecret,
   TELEGRAM_BOT_TOKEN: optionalSecret,
@@ -82,6 +87,11 @@ export function readConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): AppConfig {
   const parsed = configSchema.parse(environment);
+  if (
+    parsed.NODE_ENV === 'production' &&
+    parsed.MARKING_PIPELINE_MODE === 'simulation'
+  )
+    throw new Error('Simulation requires a non-production isolated database');
   if (
     parsed.TELEGRAM_MODE !== 'disabled' &&
     (!parsed.TELEGRAM_BOT_TOKEN || !parsed.MINI_APP_URL)

@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, defineAsyncComponent } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import type { InventoryUnitsResponse } from '@avito/contracts';
 import { createInventoryApi } from '../inventory-api';
 import { layout } from '../design/tokens';
-const props = defineProps<{ variantId: string; initData: string }>();
+const UnitLegalStatus = defineAsyncComponent(
+  () => import('./marking/UnitLegalStatus.vue'),
+);
+const props = defineProps<{
+  variantId: string;
+  initData: string;
+  roles?: string[];
+}>();
 const offset = ref(0);
 const api = createInventoryApi(props.initData);
 const units = useQuery({
@@ -76,6 +83,11 @@ const date = (value: string) =>
           {{ date(unit.receivedAt) }} · {{ unit.receiptNumber }}
         </p>
         <p class="text-label-small text-muted mt-1">{{ unit.internalCode }}</p>
+        <UnitLegalStatus
+          :unit-id="unit.id"
+          :init-data="initData"
+          :roles="roles ?? []"
+        />
       </v-sheet>
       <nav
         class="d-flex justify-space-between ga-3"

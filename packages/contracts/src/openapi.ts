@@ -1,3 +1,5 @@
+import { signingOpenApiPaths } from './signing.js';
+import { markingOpenApiPaths } from './marking.js';
 import {
   ordersQuerySchema,
   ordersPageResponseSchema,
@@ -73,11 +75,17 @@ export function createPublicApiDocument() {
       title: 'Avito warehouse API',
       version: '1.0.0',
       description:
-        'Read-only live Avito orders, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. CHZ, EDI and Avito mutations are outside this API slice.',
+        'Read-only live Avito orders, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. Marking pipeline commands are explicitly simulated; external mutations are disabled.',
     },
     servers: [{ url: '/', description: 'The origin serving this API.' }],
     components: {
       securitySchemes: {
+        localSignerToken: {
+          type: 'http',
+          scheme: 'bearer',
+          description:
+            'Dedicated local signer credential, never a Telegram session or UKЭП key.',
+        },
         telegramInitData: {
           type: 'apiKey',
           in: 'header',
@@ -100,6 +108,8 @@ export function createPublicApiDocument() {
       },
     },
     paths: {
+      ...markingOpenApiPaths(),
+      ...signingOpenApiPaths(),
       '/api/v1/orders': {
         get: {
           operationId: 'listAvitoOrders',

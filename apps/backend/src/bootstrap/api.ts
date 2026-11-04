@@ -1,5 +1,12 @@
+import { createLocalSigningStore } from '@avito/database';
+import { createLocalSignerService } from '@avito/domain';
+import { createMarkingPipelineStore } from '@avito/database';
+import { createMarkingPipeline } from '@avito/domain';
 import { createDatabaseClient, createInventoryStore } from '@avito/database';
-import { createMarkingProtector } from '../infrastructure/marking-protection.js';
+import {
+  createMarkingProtector,
+  createMarkingUnprotector,
+} from '../infrastructure/marking-protection.js';
 import { createAvitoReadLimiter } from '../infrastructure/avito-read-limiter.js';
 import { createAvitoOrderReader } from '../infrastructure/avito-orders.js';
 import { createNationalCatalogLookup } from '../infrastructure/national-catalog.js';
@@ -41,6 +48,45 @@ export async function createApiRuntime(config: AppConfig) {
         })
       : undefined;
   const app = await buildApp(config, {
+    ...(config.LOCAL_SIGNER_TOKEN
+      ? { localSignerToken: config.LOCAL_SIGNER_TOKEN }
+      : {}),
+    localSigner: createLocalSignerService(
+      createLocalSigningStore(
+        database.db,
+        config.MARKING_ENCRYPTION_KEY
+          ? {
+              encrypt: createMarkingProtector(
+                config.MARKING_ENCRYPTION_KEY,
+                config.MARKING_ENCRYPTION_KEY_ID,
+              ),
+              decrypt: createMarkingUnprotector(
+                config.MARKING_ENCRYPTION_KEY,
+                config.MARKING_ENCRYPTION_KEY_ID,
+              ),
+            }
+          : undefined,
+      ),
+    ),
+
+    markingPipeline: createMarkingPipeline(
+      createMarkingPipelineStore(
+        database.db,
+        config.MARKING_ENCRYPTION_KEY
+          ? {
+              encrypt: createMarkingProtector(
+                config.MARKING_ENCRYPTION_KEY,
+                config.MARKING_ENCRYPTION_KEY_ID,
+              ),
+              decrypt: createMarkingUnprotector(
+                config.MARKING_ENCRYPTION_KEY,
+                config.MARKING_ENCRYPTION_KEY_ID,
+              ),
+            }
+          : undefined,
+      ),
+      config.MARKING_PIPELINE_MODE,
+    ),
     readOrders: createReadOrders(
       createAvitoOrderReader({
         clientId: config.AVITO_API_CLIENT_ID,

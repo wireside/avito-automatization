@@ -1,3 +1,7 @@
+import { registerLocalSignerRoutes } from './routes/local-signer.js';
+import type { LocalSignerService } from '@avito/domain';
+import { registerMarkingRoutes } from './routes/marking.js';
+import type { MarkingPipeline } from '@avito/domain';
 import cors from '@fastify/cors';
 import { createLogger } from '@avito/observability';
 import Fastify, { type FastifyBaseLogger } from 'fastify';
@@ -19,6 +23,9 @@ import {
 } from './routes/telegram-webhook.js';
 
 export interface HttpServices {
+  localSigner?: LocalSignerService;
+  localSignerToken?: string;
+  markingPipeline?: MarkingPipeline;
   verifyTelegramSession: (initData: string) => Promise<SessionResult>;
   checkReadiness: () => Promise<DependencyReadiness>;
   deliverTelegramUpdate?: DeliverTelegramUpdate;
@@ -50,6 +57,12 @@ export async function buildApp(
   registerHttpErrors(app);
   registerOpenApiRoute(app);
   registerInventoryRoutes(app, services);
+  registerMarkingRoutes(app, services);
+  registerLocalSignerRoutes(
+    app,
+    services.localSigner,
+    services.localSignerToken,
+  );
   registerOrderRoutes(app, services);
   registerHealthRoutes(app, services.checkReadiness);
   registerAuthRoutes(app, services.verifyTelegramSession);

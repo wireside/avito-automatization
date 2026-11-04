@@ -61,6 +61,10 @@ export async function claimIntegrationOperation(
             getIntegrationOperationSourceStatuses('RUNNING'),
           ),
           sql`${integrationOperations.attemptCount} < ${integrationOperations.maxAttempts}`,
+          or(
+            isNull(integrationOperations.nextAttemptAt),
+            lte(integrationOperations.nextAttemptAt, new Date()),
+          ),
         ),
       )
       .returning();
@@ -90,7 +94,13 @@ export async function completeIntegrationOperation(
         completedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(integrationOperations.id, operationId));
+      .where(
+        and(
+          eq(integrationOperations.id, operationId),
+          eq(integrationOperations.attemptCount, attemptNumber),
+          eq(integrationOperations.status, 'RUNNING'),
+        ),
+      );
     await tx
       .update(integrationAttempts)
       .set({ outcome: 'SUCCEEDED', responseMetadata, finishedAt: new Date() })
@@ -98,6 +108,7 @@ export async function completeIntegrationOperation(
         and(
           eq(integrationAttempts.operationId, operationId),
           eq(integrationAttempts.attemptNumber, attemptNumber),
+          eq(integrationAttempts.outcome, 'RUNNING'),
         ),
       );
   });
@@ -123,7 +134,13 @@ export async function failIntegrationOperation(
         lastErrorCode: input.errorCode,
         updatedAt: new Date(),
       })
-      .where(eq(integrationOperations.id, input.operationId));
+      .where(
+        and(
+          eq(integrationOperations.id, input.operationId),
+          eq(integrationOperations.attemptCount, input.attemptNumber),
+          eq(integrationOperations.status, 'RUNNING'),
+        ),
+      );
     await tx
       .update(integrationAttempts)
       .set({
@@ -136,6 +153,7 @@ export async function failIntegrationOperation(
         and(
           eq(integrationAttempts.operationId, input.operationId),
           eq(integrationAttempts.attemptNumber, input.attemptNumber),
+          eq(integrationAttempts.outcome, 'RUNNING'),
         ),
       );
   });
@@ -165,4 +183,55 @@ export async function listEnqueueableOperationIds(
     .orderBy(asc(integrationOperations.createdAt))
     .limit(limit);
   return rows.map(({ id }) => id);
+}
+
+/** Recover process death after claim. Provider handlers must reconcile before re-submitting. */
+export async function recoverAbandonedOperations(
+  db: Database,
+  now = new Date(),
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const stale = await tx
+      .select()
+      .from(integrationOperations)
+      .where(
+        and(
+          eq(integrationOperations.status, 'RUNNING'),
+          lte(
+            integrationOperations.startedAt,
+            new Date(now.getTime() - 5 * 60_000),
+          ),
+        ),
+      )
+      .for('update', { skipLocked: true });
+    for (const operation of stale) {
+      await tx
+        .update(integrationOperations)
+        .set({
+          status:
+            operation.attemptCount < operation.maxAttempts
+              ? 'RETRY_SCHEDULED'
+              : 'MANUAL_ATTENTION',
+          nextAttemptAt: now,
+          lastErrorCode: 'WORKER_INTERRUPTED',
+          updatedAt: now,
+        })
+        .where(eq(integrationOperations.id, operation.id));
+      await tx
+        .update(integrationAttempts)
+        .set({
+          outcome: 'RETRYABLE_FAILURE',
+          errorCode: 'WORKER_INTERRUPTED',
+          errorClass: 'RECOVERY',
+          finishedAt: now,
+        })
+        .where(
+          and(
+            eq(integrationAttempts.operationId, operation.id),
+            eq(integrationAttempts.attemptNumber, operation.attemptCount),
+            eq(integrationAttempts.outcome, 'RUNNING'),
+          ),
+        );
+    }
+  });
 }

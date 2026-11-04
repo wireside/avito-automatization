@@ -7,3 +7,6 @@ export * from './users/grant-owner-access.js';
 export * from './operations/integration-operation.js';
 export * from './operations/process-integration-operation.js';
 export * from './operations/recover-operations.js';
+export * from './marking/pipeline.js';
+export * from './marking/documents.js';
+export * from './marking/signing.js';

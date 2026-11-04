@@ -1,5 +1,6 @@
 import {
   claimIntegrationOperation,
+  recoverAbandonedOperations,
   completeIntegrationOperation,
   failIntegrationOperation,
   findActiveUserWithRoles,
@@ -31,6 +32,9 @@ export function createOperationStore(
     complete: (operationId, attemptNumber) =>
       completeIntegrationOperation(database.db, operationId, attemptNumber),
     fail: (input) => failIntegrationOperation(database.db, input),
-    listPendingIds: () => listEnqueueableOperationIds(database.db),
+    listPendingIds: async () => {
+      await recoverAbandonedOperations(database.db);
+      return listEnqueueableOperationIds(database.db);
+    },
   };
 }
