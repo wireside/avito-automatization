@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { configureTelegramAppearance } from './telegram';
+import { colors } from './tokens';
 
 describe('Telegram native appearance', () => {
   it('reapplies supported dark colors on activation and theme changes', () => {
@@ -16,11 +17,21 @@ describe('Telegram native appearance', () => {
         >(),
     };
     configureTelegramAppearance(app);
-    expect(app.setHeaderColor).toHaveBeenCalledWith('#0A0A0B');
-    expect(app.setBottomBarColor).toHaveBeenCalledWith('#141416');
-    const apply = app.onEvent.mock.calls[0]![1];
-    apply();
-    expect(app.setHeaderColor).toHaveBeenCalledTimes(2);
+    const expectColorsApplied = (calls: number) => {
+      expect(app.setHeaderColor).toHaveBeenCalledTimes(calls);
+      expect(app.setHeaderColor).toHaveBeenLastCalledWith(colors.background);
+      expect(app.setBackgroundColor).toHaveBeenCalledTimes(calls);
+      expect(app.setBackgroundColor).toHaveBeenLastCalledWith(
+        colors.background,
+      );
+      expect(app.setBottomBarColor).toHaveBeenCalledTimes(calls);
+      expect(app.setBottomBarColor).toHaveBeenLastCalledWith(colors.surface);
+    };
+    expectColorsApplied(1);
+    for (const [index, [, apply]] of app.onEvent.mock.calls.entries()) {
+      apply();
+      expectColorsApplied(index + 2);
+    }
     expect(app.onEvent.mock.calls.map(([event]) => event)).toEqual([
       'themeChanged',
       'activated',
