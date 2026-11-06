@@ -12,7 +12,6 @@ import { useMarkingCommand } from '../../composables/useMarkingCommand';
 import ScannerCard from '../ScannerCard.vue';
 import CameraScanner from '../CameraScanner.vue';
 import CommandNotice from './CommandNotice.vue';
-import SimulationBanner from './SimulationBanner.vue';
 import MarkingActionDialog from './MarkingActionDialog.vue';
 import MarkingDocumentPanel from './MarkingDocumentPanel.vue';
 const props = defineProps<{
@@ -62,7 +61,6 @@ const packed = computed(
 const canWrite = computed(
   () =>
     props.roles.some((r) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(r)) &&
-    shipment.data.value?.mode === 'simulation' &&
     !shipment.isError.value,
 );
 const expired = computed(
@@ -84,7 +82,7 @@ const avito = computed(() =>
   data.value?.items.some((i) => i.avito_marking_status === 'REJECTED')
     ? 'Есть ошибка'
     : data.value?.items.every((i) => i.avito_marking_status === 'ACCEPTED')
-      ? 'Принято в симуляции'
+      ? 'Принято Авито'
       : 'Ожидает обработки',
 );
 const legal = computed(() =>
@@ -102,9 +100,9 @@ const legal = computed(() =>
             'PROCESSING',
           ].includes(i.legal_operation_status ?? ''),
         )
-      ? 'Обрабатывается в симуляции'
+      ? 'Обрабатывается в ЧЗ'
       : data.value?.items.every((i) => i.legal_operation_status === 'CONFIRMED')
-        ? 'Подтверждено в симуляции'
+        ? 'Подтверждено ЧЗ'
         : 'Ещё не оформлен',
 );
 async function scan(
@@ -174,14 +172,10 @@ async function retry() {
         >Обновить</v-btn
       >
     </div>
-    <SimulationBanner
-      v-if="shipment.data.value"
-      :mode="shipment.data.value.mode"
-      :simulated="shipment.data.value.simulated"
-    /><v-progress-linear
-      v-if="shipment.isPending.value"
-      indeterminate
-    /><v-alert v-if="shipment.isError.value" type="error" class="mb-4"
+    <v-progress-linear v-if="shipment.isPending.value" indeterminate /><v-alert
+      v-if="shipment.isError.value"
+      type="error"
+      class="mb-4"
       >Не удалось обновить карточку.<span v-if="data">
         Показаны устаревшие данные.</span
       ><v-btn @click="shipment.refetch()">Повторить</v-btn></v-alert
@@ -287,15 +281,14 @@ async function retry() {
               Оформляем ЧЗ. Можно закрыть экран — обработка продолжится.
             </p></v-card
           ><v-alert v-if="expired" type="warning" class="mb-4"
-            >Подготовка просрочена. Проверьте посылку вместе с
-            владельцем.</v-alert
+            >Посылка долго ожидает передачи. Проверьте её наличие и
+            состав.</v-alert
           >
           <div v-if="canWrite" class="shipment-action-bar">
             <v-card class="pa-4"
               ><template v-if="data.status === 'PACKED' && !data.prepared_at"
                 ><p class="text-body-small text-secondary mb-3">
-                  Подготовьте непосредственно перед передачей. Срок готовности —
-                  30 минут.
+                  Подготовьте непосредственно перед передачей перевозчику.
                 </p>
                 <v-btn
                   block
@@ -308,7 +301,7 @@ async function retry() {
                 v-else-if="data.status === 'READY'"
                 block
                 color="primary-strong"
-                :disabled="busy || expired || !data.prepared_at"
+                :disabled="busy || !data.prepared_at"
                 @click="openAction('handover')"
                 >Передал перевозчику</v-btn
               ><v-btn
@@ -350,7 +343,7 @@ async function retry() {
         actionMessage =
           action === 'return'
             ? 'Возврат получен. Исправная вещь будет доступна только после юридического восстановления.'
-            : 'Событие сохранено в тестовом процессе.';
+            : 'Событие сохранено.';
         shipment.refetch();
       "
     />

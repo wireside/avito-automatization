@@ -57,7 +57,7 @@ const fields = computed<[string, string][]>(() => {
         ['documentNumber', 'Номер документа поставщика'],
         ['documentDate', 'Дата документа'],
         ['supplierInn', 'ИНН поставщика'],
-        ['evidenceReference', 'Источник подтверждения'],
+        ['evidenceReference', 'Идентификатор УПД в Честном знаке'],
       ];
     case 'handover':
       return [['evidenceReference', 'Номер или ссылка подтверждения передачи']];
@@ -227,9 +227,7 @@ async function loadCalendar(files: File | File[] | null) {
       ><h2 class="text-title-medium mb-3">
         {{ titles[action] ?? 'Складское действие' }}
       </h2>
-      <p class="text-body-small text-primary mb-4">
-        Тестовый процесс · без реальных изменений Авито и ЧЗ
-      </p>
+      <p class="text-body-small text-primary mb-4">Действие складского учёта</p>
       <CommandNotice
         :error="cmd.error.value"
         :message="cmd.message.value"

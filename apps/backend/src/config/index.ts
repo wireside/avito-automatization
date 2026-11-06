@@ -16,7 +16,47 @@ const optionalSecret = z.preprocess(
 );
 
 const configSchema = z.object({
-  MARKING_PIPELINE_MODE: z.enum(['disabled', 'simulation']).default('disabled'),
+  PUBLIC_API_URL: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z
+      .url()
+      .refine((v) => {
+        const u = new URL(v);
+        return (
+          u.protocol === 'https:' &&
+          !u.username &&
+          !u.password &&
+          !u.search &&
+          !u.hash &&
+          u.pathname === '/'
+        );
+      }, 'Expected public HTTPS API origin')
+      .transform((v) => new URL(v).origin)
+      .optional(),
+  ),
+  SIGNER_TELEGRAM_ENROLLMENT_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  CHZ_SUBMISSION_MODE: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.enum(['AVITO_OFD', 'CHZ_MANUAL', 'DIRECT_TRUE_API']).optional(),
+  ),
+  CHZ_DOCUMENT_SUBMISSION_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  AVITO_WRITES_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  LOCAL_SIGNER_CERTIFICATE_THUMBPRINT: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z
+      .string()
+      .regex(/^[0-9A-Fa-f]{40}$/)
+      .optional(),
+  ),
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .default('development'),
@@ -88,10 +128,27 @@ export function readConfig(
 ): AppConfig {
   const parsed = configSchema.parse(environment);
   if (
-    parsed.NODE_ENV === 'production' &&
-    parsed.MARKING_PIPELINE_MODE === 'simulation'
+    parsed.CHZ_DOCUMENT_SUBMISSION_ENABLED &&
+    (parsed.CHZ_SUBMISSION_MODE !== 'DIRECT_TRUE_API' ||
+      (!(
+        parsed.LOCAL_SIGNER_TOKEN && parsed.LOCAL_SIGNER_CERTIFICATE_THUMBPRINT
+      ) &&
+        !parsed.SIGNER_TELEGRAM_ENROLLMENT_ENABLED) ||
+      !parsed.MARKING_ENCRYPTION_KEY)
   )
-    throw new Error('Simulation requires a non-production isolated database');
+    throw new Error(
+      'Direct CHZ sending requires DIRECT_TRUE_API, encryption and a pinned local signer',
+    );
+  if (
+    parsed.SIGNER_TELEGRAM_ENROLLMENT_ENABLED &&
+    (!parsed.PUBLIC_API_URL ||
+      !parsed.TELEGRAM_BOT_TOKEN ||
+      !parsed.MARKING_ENCRYPTION_KEY ||
+      parsed.TELEGRAM_MODE === 'disabled')
+  )
+    throw new Error(
+      'Telegram signer setup requires public HTTPS API, bot, encryption and enabled Telegram runtime',
+    );
   if (
     parsed.TELEGRAM_MODE !== 'disabled' &&
     (!parsed.TELEGRAM_BOT_TOKEN || !parsed.MINI_APP_URL)

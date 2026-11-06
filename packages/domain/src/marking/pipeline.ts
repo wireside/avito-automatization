@@ -1,12 +1,12 @@
 import type { SessionUser } from '../auth/verify-telegram-session.js';
 
-export type PipelineMode = 'disabled' | 'simulation';
 export type PipelineAction =
   | 'configure'
   | 'calendar'
   | 'supply'
   | 'check'
   | 'create'
+  | 'importOrder'
   | 'pack'
   | 'prepare'
   | 'handover'
@@ -15,8 +15,7 @@ export type PipelineAction =
   | 'return'
   | 'dispose'
   | 'retry'
-  | 'correctDocument'
-  | 'simulate';
+  | 'correctDocument';
 export type PipelineInput = Record<string, unknown> & { requestId: string };
 export class PipelineError extends Error {
   constructor(
@@ -41,17 +40,9 @@ export interface PipelineSnapshot {
   receivedLegally: boolean;
   observedAt: string | null;
   pending: boolean;
-  simulated: boolean;
 }
-export function legalBlockers(
-  unit: PipelineSnapshot,
-  now: Date,
-  mode: PipelineMode,
-): string[] {
+export function legalBlockers(unit: PipelineSnapshot, now: Date): string[] {
   const blockers: string[] = [];
-  if (mode !== 'simulation') blockers.push('LEGAL_PROVIDER_DISABLED');
-  if (unit.simulated !== (mode === 'simulation'))
-    blockers.push('EVIDENCE_ENVIRONMENT_MISMATCH');
   if (!unit.receivedLegally) blockers.push('SUPPLY_NOT_CONFIRMED');
   if (unit.legalState !== 'IN_CIRCULATION')
     blockers.push('CODE_NOT_IN_CIRCULATION');
@@ -94,10 +85,10 @@ export interface PipelineStore {
     action: PipelineAction,
     input: PipelineInput,
     actorId: string,
-    mode: PipelineMode,
   ): Promise<Record<string, unknown>>;
   read(
     kind:
+      | 'integrations'
       | 'overview'
       | 'shipments'
       | 'shipment'
@@ -109,17 +100,17 @@ export interface PipelineStore {
       | 'settings',
     id: string | undefined,
     offset: number,
-    mode: PipelineMode,
   ): Promise<Record<string, unknown>>;
-  run(operationId: string, mode: PipelineMode): Promise<void>;
-  reconcile(mode: PipelineMode): Promise<void>;
+
+  reconcile(): Promise<void>;
 }
 export function createMarkingPipeline(
   store: PipelineStore,
-  mode: PipelineMode,
+  options: {
+    importOrder?: (input: PipelineInput) => Promise<PipelineInput>;
+  } = {},
 ) {
   return {
-    mode,
     async command(
       user: SessionUser,
       action: PipelineAction,
@@ -132,7 +123,6 @@ export function createMarkingPipeline(
         'dispose',
         'retry',
         'correctDocument',
-        'simulate',
       ].includes(action);
       requirePipeline(
         user.roles.some((r) =>
@@ -143,9 +133,18 @@ export function createMarkingPipeline(
         ),
         'FORBIDDEN',
       );
-      // No live mutation adapter exists in this release. Simulation must be enabled explicitly.
-      requirePipeline(mode === 'simulation', 'LEGAL_PROVIDER_DISABLED');
-      return store.execute(action, input, user.id, mode);
+      if (action === 'importOrder') {
+        requirePipeline(options.importOrder, 'AVITO_NOT_CONFIGURED');
+        const imported = await options.importOrder(input);
+        if (imported.existingShipmentId)
+          return {
+            ok: true,
+            replayed: true,
+            result: { shipmentId: imported.existingShipmentId },
+          };
+        return store.execute('create', imported, user.id);
+      }
+      return store.execute(action, input, user.id);
     },
     async read(
       user: SessionUser,
@@ -164,10 +163,9 @@ export function createMarkingPipeline(
           user.roles.some((r) => ['OWNER', 'ADMIN', 'ACCOUNTANT'].includes(r)),
           'FORBIDDEN',
         );
-      return store.read(kind, id, offset, mode);
+      return store.read(kind, id, offset);
     },
-    execute: (operationId: string) => store.run(operationId, mode),
-    reconcile: () => store.reconcile(mode),
+    reconcile: () => store.reconcile(),
   };
 }
 export type MarkingPipeline = ReturnType<typeof createMarkingPipeline>;

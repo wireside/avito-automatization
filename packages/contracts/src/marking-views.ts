@@ -49,7 +49,6 @@ export const unitLegalSchema = z.object({
   observed_at: text,
   received_legally: z.boolean(),
   pending: z.boolean(),
-  simulated: z.boolean().nullable(),
   blockers: z.array(z.string()),
 });
 export const overviewSchema = z.object({

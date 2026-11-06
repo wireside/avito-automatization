@@ -46,18 +46,6 @@ export const markingCommandResults = pgTable(
     unique('marking_commands_actor_request_uq').on(t.actorId, t.requestId),
   ],
 );
-/** Deliberately separate from production legal observations: test provider's durable state. */
-export const markingSimulationUnits = pgTable('marking_simulation_units', {
-  unitId: uuid('unit_id')
-    .primaryKey()
-    .references(() => productUnits.id),
-  providerState: text('provider_state').notNull(),
-  ownerInn: text('owner_inn').notNull(),
-  outcome: text('outcome').notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
 export const markingSupplyEvidence = pgTable('marking_supply_evidence', {
   unitId: uuid('unit_id')
     .primaryKey()
@@ -66,21 +54,9 @@ export const markingSupplyEvidence = pgTable('marking_supply_evidence', {
   documentDate: text('document_date').notNull(),
   supplierInn: text('supplier_inn').notNull(),
   evidenceReference: text('evidence_reference').notNull(),
-  simulated: boolean('simulated').notNull(),
+  providerDocumentId: text('provider_document_id'),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
 });
-export const markingSimulationDocuments = pgTable(
-  'marking_simulation_documents',
-  {
-    documentId: uuid('document_id').primaryKey(),
-    externalId: uuid('external_id').defaultRandom().notNull(),
-    payloadHash: text('payload_hash').notNull(),
-    items: jsonb('items').$type<Record<string, string>>().notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-);
 export const markingIssues = pgTable('marking_issues', {
   id: entityId(),
   key: text('key').notNull().unique(),
@@ -107,27 +83,100 @@ export const markingDocumentArtifacts = pgTable('marking_document_artifacts', {
   byteLength: integer('byte_length').notNull(),
 });
 
-export const markingSigningTasks = pgTable('marking_signing_tasks', {
+export const signerJobs = pgTable('signer_jobs', {
   id: entityId(),
   documentId: uuid('document_id')
-    .notNull()
     .unique()
     .references(() => chzDocuments.id),
+  purpose: text('purpose').notNull(),
+  documentType: text('document_type').notNull(),
   sellerInn: text('seller_inn').notNull(),
-  simulated: boolean('simulated').notNull(),
+  authUuid: text('auth_uuid'),
+  payloadCiphertext: text('payload_ciphertext').notNull(),
+  encryptionKeyId: text('encryption_key_id').notNull(),
+  identityHash: text('identity_hash').notNull(),
+  payloadHash: text('payload_hash').notNull(),
   status: text('status').default('PENDING').notNull(),
   signerId: text('signer_id'),
   leaseId: uuid('lease_id'),
   leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   signatureCiphertext: text('signature_ciphertext'),
   signatureKeyId: text('signature_key_id'),
   signatureIdentityHash: text('signature_identity_hash'),
   signatureHash: text('signature_hash'),
-  verifiedPayloadHash: text('verified_payload_hash'),
-  verificationSource: text('verification_source'),
-  receivedAt: timestamp('received_at', { withTimezone: true }),
+  certificateThumbprint: text('certificate_thumbprint'),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
+});
+export const signerDevices = pgTable('signer_devices', {
+  signerId: text('signer_id').primaryKey(),
+  certificateThumbprint: text('certificate_thumbprint').notNull(),
+  certificateExpiresAt: timestamp('certificate_expires_at', {
+    withTimezone: true,
+  }).notNull(),
+  ready: boolean('ready').notNull(),
+  errorCode: text('error_code'),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+});
+export const chzSessions = pgTable('chz_sessions', {
+  sellerInn: text('seller_inn').primaryKey(),
+  ciphertext: text('ciphertext').notNull(),
+  keyId: text('key_id').notNull(),
+  identityHash: text('identity_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+});
+
+export const markingProviderReceipts = pgTable('marking_provider_receipts', {
+  id: entityId(),
+  documentId: uuid('document_id')
+    .notNull()
+    .references(() => chzDocuments.id),
+  payloadCiphertext: text('payload_ciphertext').notNull(),
+  encryptionKeyId: text('encryption_key_id').notNull(),
+  identityHash: text('identity_hash').notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const signerEnrollments = pgTable('signer_enrollments', {
+  id: entityId(),
+  ownerId: uuid('owner_id')
+    .notNull()
+    .references(() => users.id),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  invalidatedAt: timestamp('invalidated_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const signerInstallations = pgTable('signer_installations', {
+  id: entityId(),
+  enrollmentId: uuid('enrollment_id')
+    .notNull()
+    .unique()
+    .references(() => signerEnrollments.id),
+  ownerId: uuid('owner_id')
+    .notNull()
+    .references(() => users.id),
+  signerId: text('signer_id').notNull().unique(),
+  sellerInn: text('seller_inn').notNull(),
+  certificateThumbprint: text('certificate_thumbprint').notNull(),
+  certificateExpiresAt: timestamp('certificate_expires_at', {
+    withTimezone: true,
+  }).notNull(),
+  deviceTokenHash: text('device_token_hash').notNull().unique(),
+  pairingCode: text('pairing_code').notNull(),
+  status: text('status').notNull().default('PENDING'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  notificationMessageId: integer('notification_message_id'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

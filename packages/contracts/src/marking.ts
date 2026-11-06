@@ -41,30 +41,15 @@ export const markingRequests = {
     })
     .strict(),
   check: z.object({ ...base, unitId: id }).strict(),
-  create: z
+  importOrder: z
     .object({
       ...base,
       externalOrderId: text,
-      externalAccountId: text,
-      parcelCode: text,
-      warehouseId: id,
-      items: z
-        .array(
-          z
-            .object({
-              externalLineKey: text,
-              variantId: id,
-              quantity: z.number().int().min(1).max(100),
-              unitPriceKopecks: z
-                .number()
-                .int()
-                .nonnegative()
-                .max(Number.MAX_SAFE_INTEGER),
-            })
-            .strict(),
-        )
-        .min(1)
-        .max(50),
+      warehouseId: id.optional(),
+      mappings: z
+        .array(z.object({ externalItemId: text, variantId: id }).strict())
+        .max(50)
+        .optional(),
     })
     .strict(),
   pack: z.object({ ...base, shipmentId: id, ...scan }).strict(),
@@ -121,30 +106,16 @@ export const markingRequests = {
     .strict(),
   correctDocument: z.object({ ...base, documentId: id, reason: text }).strict(),
   retry: z.object({ ...base, operationId: id, reason: text }).strict(),
-  simulate: z
-    .object({
-      ...base,
-      unitId: id,
-      state: z.enum(['INTRODUCED', 'RETIRED', 'EMITTED', 'UNKNOWN']),
-      ownerInn: z.string().regex(/^\d{12}$/),
-      outcome: z
-        .enum(['SUCCESS', 'REJECTED', 'AMBIGUOUS', 'STATE_MISMATCH'])
-        .default('SUCCESS'),
-    })
-    .strict(),
 } as const;
 export const markingQuery = z
   .object({ offset: z.coerce.number().int().min(0).max(100000).default(0) })
   .strict();
 export const markingParams = z.object({ id }).strict();
 export const markingReadSchema = z.object({
-  mode: z.enum(['disabled', 'simulation']),
-  simulated: z.boolean(),
   data: z.unknown(),
 });
 export const markingCommandSchema = z.object({
   ok: z.literal(true),
-  simulated: z.literal(true),
   replayed: z.boolean(),
   result: z.record(z.string(), z.unknown()),
 });
@@ -164,7 +135,7 @@ export function markingOpenApiPaths() {
         tags: ['Marking'],
         security,
         description:
-          'Local simulation only. No external Avito/CHZ mutations. Actor-scoped requestId is required; same requestId with changed content returns 409.',
+          'Warehouse pipeline. External document submission is separately controlled. Actor-scoped requestId is required; same requestId with changed content returns 409.',
         requestBody: {
           required: true,
           content: { 'application/json': { schema: z.toJSONSchema(schema) } },
@@ -191,6 +162,7 @@ export function markingOpenApiPaths() {
     };
   for (const suffix of [
     'overview',
+    'integrations',
     'shipments',
     'shipments/{id}',
     'units/{id}',
@@ -234,3 +206,15 @@ export function markingOpenApiPaths() {
     };
   return paths;
 }
+
+export const integrationStatusSchema = z.object({
+  avitoConfigured: z.boolean(),
+  signerConfigured: z.boolean(),
+  documentsEnabled: z.boolean(),
+  avitoWritesEnabled: z.boolean(),
+  seller_configured: z.boolean(),
+  chz_authorized: z.boolean(),
+  signer_online: z.boolean(),
+  signer_last_seen_at: z.string().nullable(),
+  certificate_expires_at: z.string().nullable(),
+});

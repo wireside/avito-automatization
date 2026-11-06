@@ -5,8 +5,8 @@ import {
   createMarkingPipeline,
   type PipelineStore,
 } from './pipeline.js';
-describe('marking policies', () => {
-  it('uses explicit Russian working days including transferred weekends and earliest delivery', () => {
+describe('warehouse legal policy', () => {
+  it('uses explicit working days and the earlier actual delivery', () => {
     const days = {
       '2026-11-05': true,
       '2026-11-06': true,
@@ -24,41 +24,34 @@ describe('marking policies', () => {
       'CALENDAR_INCOMPLETE',
     );
   });
-  it('rejects stale, unknown ownership, pending, and cross-environment evidence', () => {
-    const base = {
+  it('requires fresh provider evidence, ownership and legal receipt', () => {
+    const u = {
       physicalState: 'AVAILABLE',
       legalState: 'IN_CIRCULATION',
       ownership: 'VERIFIED',
       receivedLegally: true,
       observedAt: '2026-11-04T10:00:00Z',
       pending: false,
-      simulated: true,
     };
-    expect(
-      legalBlockers(base, new Date('2026-11-04T10:05:00Z'), 'simulation'),
-    ).toEqual([]);
+    expect(legalBlockers(u, new Date('2026-11-04T10:05:00Z'))).toEqual([]);
     expect(
       legalBlockers(
-        { ...base, pending: true, ownership: 'UNKNOWN' },
+        { ...u, pending: true, ownership: 'UNKNOWN', receivedLegally: false },
         new Date('2026-11-04T10:16:00Z'),
-        'simulation',
       ),
     ).toEqual(
       expect.arrayContaining([
         'OWNERSHIP_NOT_VERIFIED',
         'LEGAL_OPERATION_PENDING',
         'LEGAL_CHECK_STALE',
+        'SUPPLY_NOT_CONFIRMED',
       ]),
     );
-    expect(
-      legalBlockers(base, new Date('2026-11-04T10:05:00Z'), 'disabled'),
-    ).toContain('EVIDENCE_ENVIRONMENT_MISMATCH');
   });
-  it('enforces roles and refuses external mutation mode', async () => {
+  it('allows local setup without external writes and authorizes destructive commands', async () => {
     const store = {
-      execute: vi.fn(),
+      execute: vi.fn().mockResolvedValue({ ok: true }),
       read: vi.fn(),
-      run: vi.fn(),
       reconcile: vi.fn(),
     } satisfies PipelineStore;
     const user = {
@@ -68,17 +61,13 @@ describe('marking policies', () => {
       roles: ['WAREHOUSE'],
     };
     await expect(
-      createMarkingPipeline(store, 'simulation').command(user, 'dispose', {
-        requestId: 'r',
-      }),
+      createMarkingPipeline(store).command(user, 'dispose', { requestId: 'r' }),
     ).rejects.toThrow('FORBIDDEN');
-    await expect(
-      createMarkingPipeline(store, 'disabled').command(
-        { ...user, roles: ['OWNER'] },
-        'create',
-        { requestId: 'r' },
-      ),
-    ).rejects.toThrow('LEGAL_PROVIDER_DISABLED');
-    expect(store.execute).not.toHaveBeenCalled();
+    await createMarkingPipeline(store).command(
+      { ...user, roles: ['OWNER'] },
+      'configure',
+      { requestId: 'r' },
+    );
+    expect(store.execute).toHaveBeenCalledOnce();
   });
 });

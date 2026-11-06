@@ -30,7 +30,7 @@ try {
     }
     await bot.telegram.setWebhook(publicUrl.href, {
       secret_token: config.TELEGRAM_WEBHOOK_SECRET!,
-      allowed_updates: ['message'],
+      allowed_updates: ['message', 'callback_query'],
     });
     const actual = await bot.telegram.getWebhookInfo();
     if (actual.url !== publicUrl.href)

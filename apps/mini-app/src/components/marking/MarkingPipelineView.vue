@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import IntegrationStatusBanner from './IntegrationStatusBanner.vue';
 import { computed, ref } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import {
@@ -13,7 +14,6 @@ import {
   displayMoney,
 } from '../../marking-api';
 import ShipmentWorkspace from './ShipmentWorkspace.vue';
-import SimulationBanner from './SimulationBanner.vue';
 import MarkingSettingsView from './MarkingSettingsView.vue';
 import MarkingDocumentPanel from './MarkingDocumentPanel.vue';
 import MarkingActionDialog from './MarkingActionDialog.vue';
@@ -92,6 +92,10 @@ function showDocument(value: unknown) {
 }
 </script>
 <template>
+  <IntegrationStatusBanner
+    v-if="active && view !== 'settings'"
+    :init-data="initData"
+  />
   <div>
     <ShipmentWorkspace
       v-if="selected"
@@ -107,7 +111,7 @@ function showDocument(value: unknown) {
         <div>
           <h1 class="text-title-large">Очередь упаковки</h1>
           <p class="text-body-small text-secondary mt-2">
-            Отдельно от реальных заказов Авито
+            Заказы Авито, взятые в работу
           </p>
         </div>
         <v-spacer /><v-btn
@@ -116,11 +120,7 @@ function showDocument(value: unknown) {
           >Обновить</v-btn
         >
       </div>
-      <SimulationBanner
-        v-if="queue.data.value"
-        :mode="queue.data.value.mode"
-        :simulated="queue.data.value.simulated"
-      /><v-sheet
+      <v-sheet
         v-if="overview.data.value"
         class="d-flex flex-wrap ga-4 mb-5 text-body-small text-secondary"
         ><span>Упаковано: {{ overview.data.value.data.packed }}</span
@@ -149,7 +149,7 @@ function showDocument(value: unknown) {
             ><div class="d-flex flex-wrap ga-2 align-center">
               <h2 class="text-title-medium">{{ item.parcel_code }}</h2>
               <v-spacer /><v-chip color="primary-soft" class="text-primary"
-                >Тестовый процесс</v-chip
+                >Складской заказ</v-chip
               >
             </div>
             <p class="text-body-medium mt-3">{{ markingLabel(item.status) }}</p>
@@ -175,12 +175,12 @@ function showDocument(value: unknown) {
           {{
             search
               ? 'На странице ничего не найдено.'
-              : 'Нет тестовых отгрузок для упаковки.'
+              : 'Нет отгрузок для упаковки.'
           }}
         </p>
         <p class="text-body-small text-secondary mt-2">
-          Очередь заполняется тестовой интеграцией. Реальные заказы сюда
-          автоматически не переносятся.
+          Откройте заказ Авито и возьмите его в работу. Состав и цена будут
+          загружены из Авито.
         </p></v-card
       >
       <div class="d-flex justify-space-between mt-5">
@@ -206,14 +206,10 @@ function showDocument(value: unknown) {
         :uncertain="!!issueCommand.pending.value"
         @retry="issueCommand.retry()"
       />
-      <SimulationBanner
-        v-if="issues.data.value"
-        :mode="issues.data.value.mode"
-        :simulated="issues.data.value.simulated"
-      /><v-progress-linear
-        v-if="issues.isPending.value"
-        indeterminate
-      /><v-alert v-if="issues.isError.value" type="error" class="mb-4"
+      <v-progress-linear v-if="issues.isPending.value" indeterminate /><v-alert
+        v-if="issues.isError.value"
+        type="error"
+        class="mb-4"
         >Не удалось обновить проблемы.<span v-if="issues.data.value">
           Показаны прошлые данные.</span
         ><v-btn @click="issues.refetch()">Повторить</v-btn></v-alert
@@ -253,7 +249,7 @@ function showDocument(value: unknown) {
             v-if="
               issue.code === 'LEGAL_CHECK_STALE' &&
               roles.some((r) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(r)) &&
-              issues.data.value?.mode === 'simulation'
+              true
             "
             :disabled="issueCommand.busy.value || !!issueCommand.pending.value"
             @click="issueCommand.send('check', { unitId: issue.entity_id })"
@@ -272,11 +268,7 @@ function showDocument(value: unknown) {
             @click="showDocument(issue.details.documentId)"
             >Открыть документ</v-btn
           ><v-btn
-            v-if="
-              owner &&
-              issue.code === 'JOB_FAILED' &&
-              issues.data.value?.mode === 'simulation'
-            "
+            v-if="owner && issue.code === 'JOB_FAILED'"
             @click="
               retryId = issue.entity_id;
               retryOpen = true;
@@ -319,6 +311,7 @@ function showDocument(value: unknown) {
     </section>
     <MarkingSettingsView
       v-if="view === 'settings' && owner"
+      :roles="roles"
       :init-data="initData"
       :active="active"
     /><v-dialog v-model="docOpen" max-width="880"

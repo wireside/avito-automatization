@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/vue-query';
 import { documentsSchema, documentSchema } from '@avito/contracts';
 import { createMarkingApi, markingLabel, displayDate } from '../../marking-api';
 import MarkingActionDialog from './MarkingActionDialog.vue';
-import SimulationBanner from './SimulationBanner.vue';
 const props = defineProps<{
   initData: string;
   roles: string[];
@@ -86,11 +85,7 @@ async function download() {
         >Обновить</v-btn
       >
     </div>
-    <SimulationBanner
-      v-if="current.data.value"
-      :simulated="current.data.value.simulated"
-      :mode="current.data.value.mode"
-    />
+
     <p v-if="unitIds && !selected" class="text-body-small text-secondary mb-4">
       Документы этих экземпляров на текущей странице общего реестра. Полного
       серверного фильтра по заказу пока нет.
@@ -114,12 +109,11 @@ async function download() {
       </p>
       <p class="text-body-small text-muted mt-2">
         {{
-          doc.verification_source === 'SIMULATION' &&
           doc.signing_status === 'VERIFIED'
-            ? 'Проверено только в симуляции.'
-            : 'Криптографическое подтверждение не установлено.'
+            ? 'Подпись проверена закреплённым подписантом.'
+            : 'Ожидаем подпись владельца.'
         }}
-        Не является юридическим завершением.
+        Результат обработки в ЧЗ показан отдельно.
       </p>
       <p
         v-if="doc.external_document_id"
@@ -161,12 +155,11 @@ async function download() {
         <v-btn v-if="!selected" @click="selected = doc.id"
           >Открыть документ</v-btn
         ><v-btn v-if="selected && canExport" @click="exportConfirm = true"
-          >Скачать тестовый пакет</v-btn
+          >Скачать документ</v-btn
         ><v-btn
           v-if="
             selected &&
             owner &&
-            current.data.value?.mode === 'simulation' &&
             doc.status === 'MANUAL_ATTENTION' &&
             doc.items.some((i) => i.status === 'REJECTED')
           "
@@ -197,10 +190,10 @@ async function download() {
       :init-data="initData"
     /><v-dialog v-model="exportConfirm" max-width="480"
       ><v-card class="pa-5"
-        ><h3 class="text-title-medium">Экспорт тестового документа</h3>
+        ><h3 class="text-title-medium">Экспорт документа</h3>
         <p class="text-body-medium text-secondary my-4">
           JSON содержит полные коды внутри документа. Не публикуйте пакет.
-          Тестовая подпись не является УКЭП.
+          Документ и подпись экспортируются без изменения исходных байтов.
         </p>
         <v-alert v-if="exportError" type="error" class="mb-3">{{
           exportError

@@ -107,6 +107,9 @@ export const chzDocuments = pgTable(
     payloadHash: text('payload_hash'),
     status: chzProgressEnum('status').default('PREPARING').notNull(),
     providerStatus: text('provider_status'),
+    submissionStartedAt: timestamp('submission_started_at', {
+      withTimezone: true,
+    }),
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
     processedAt: timestamp('processed_at', { withTimezone: true }),
     lastOperationId: uuid('last_operation_id')

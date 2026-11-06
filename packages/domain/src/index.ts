@@ -10,3 +10,5 @@ export * from './operations/recover-operations.js';
 export * from './marking/pipeline.js';
 export * from './marking/documents.js';
 export * from './marking/signing.js';
+export * from './marking/provider.js';
+export * from './marking/enrollment.js';

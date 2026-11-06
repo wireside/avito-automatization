@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import ImportAvitoOrderDialog from './marking/ImportAvitoOrderDialog.vue';
+import { computed, ref } from 'vue';
 import { useDisplay } from 'vuetify';
 import { mdiRefresh } from '@mdi/js';
 import { useOrders } from '../composables/useOrders';
@@ -10,7 +11,9 @@ import {
   type MarketplaceOrderDto,
 } from '../orders-api';
 import ProductThumbnail from './ProductThumbnail.vue';
-const props = defineProps<{ initData: string }>();
+const props = defineProps<{ initData: string; roles?: string[] }>();
+const emit = defineEmits<{ workStarted: [] }>();
+const importOpen = ref(false);
 const { mdAndUp } = useDisplay();
 const { status, page, selectedId, search, orders, detail, visibleOrders } =
   useOrders(props.initData);
@@ -77,6 +80,23 @@ const actionNames: Record<string, string> = {
 </script>
 <template>
   <section aria-labelledby="orders-title">
+    <v-btn
+      v-if="
+        order &&
+        roles?.some((r) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(r)) &&
+        ['on_confirmation', 'ready_to_ship'].includes(order.status)
+      "
+      color="primary-strong"
+      class="mb-4"
+      @click="importOpen = true"
+      >Взять заказ в работу</v-btn
+    ><ImportAvitoOrderDialog
+      v-if="order"
+      v-model="importOpen"
+      :order="order"
+      :init-data="initData"
+      @done="emit('workStarted')"
+    />
     <v-btn
       v-if="selectedId"
       variant="text"
@@ -200,8 +220,8 @@ const actionNames: Record<string, string> = {
         <v-chip
           color="raised"
           class="text-secondary flex-shrink-0"
-          title="Подтверждение, сборка и маркировка недоступны. Заказы Авито и склад не изменяются."
-          >Только просмотр</v-chip
+          title="Статусы, состав и цена получены из Авито."
+          >Данные Авито</v-chip
         >
       </div>
       <v-card
@@ -399,28 +419,17 @@ const actionNames: Record<string, string> = {
             </div>
             <v-divider class="my-4" />
             <p class="text-body-small text-secondary">
-              Складской вариант и резерв не назначены. Размер и цвет не
-              определяются по одному объявлению.
+              Сопоставление со складом и резерв доступны через «Взять заказ в
+              работу».
             </p>
           </v-card>
           <v-card class="pa-4 pa-md-6 mb-5"
             ><h2 class="text-title-medium mb-3">Просмотр заказа</h2>
             <p class="text-body-medium text-secondary">
-              Статус и доступные действия получены из Авито. Подтверждение,
-              сборка, отгрузка и передача маркировки в приложении пока
-              выключены.
+              Для сборки нажмите «Взять заказ в работу», затем откройте
+              «Упаковку». Подтверждайте и отменяйте сам заказ в Авито.
             </p>
-            <v-btn
-              v-if="order.availableActions.some((a) => a.name === 'confirm')"
-              disabled
-              block
-              class="mt-4"
-              >Подтверждение недоступно</v-btn
-            >
-            <p class="text-body-small text-muted mt-3">
-              Запросы в Честный знак не отправляются.
-            </p></v-card
-          >
+          </v-card>
           <v-card class="pa-4 pa-md-6"
             ><h2 class="text-title-medium mb-3">Обновления Авито</h2>
             <p class="text-body-medium">Создан: {{ date(order.createdAt) }}</p>
@@ -458,10 +467,7 @@ const actionNames: Record<string, string> = {
             >
               Трек-номер: {{ order.delivery.trackingNumber ?? 'Не указан' }}
             </p>
-            <v-btn disabled block class="mt-4"
-              >PDF пока недоступен</v-btn
-            ></v-card
-          >
+          </v-card>
           <v-card class="pa-4 pa-md-6 mb-5"
             ><h2 class="text-title-medium mb-3">Сумма заказа</h2>
             <p class="text-title-large">{{ amount(order.priceMinor) }}</p>
@@ -480,7 +486,7 @@ const actionNames: Record<string, string> = {
               }}{{ action.required ? ' · обязательно' : '' }}
             </p>
             <p class="text-body-small text-muted mt-3">
-              Только информация · выполнение недоступно
+              Действия маркетплейса выполняйте в Авито
             </p></v-card
           >
         </v-col></v-row

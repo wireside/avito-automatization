@@ -16,7 +16,7 @@ it('isolates local signer bearer auth from Telegram and never exposes payloads a
       verifyTelegramSession: () =>
         Promise.resolve({ ok: false, code: 'USER_NOT_ALLOWED' }),
       checkReadiness: () => Promise.resolve({ postgres: 'ok', redis: 'ok' }),
-      localSigner: { claim, submit },
+      localSigner: { claim, submit, heartbeat: vi.fn() },
       localSignerToken: token,
     },
   );
@@ -41,6 +41,5 @@ it('isolates local signer bearer auth from Telegram and never exposes payloads a
   expect(r.json()).toEqual({ task: null });
   expect(claim).toHaveBeenCalledWith({
     signerId: 'local-1',
-    acceptSimulation: false,
   });
 });

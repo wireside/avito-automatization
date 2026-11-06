@@ -95,6 +95,7 @@ while (!stopping) {
     const miniAppUrl = initial.MINI_APP_URL!;
     const overrides = {
       TELEGRAM_MODE: 'polling',
+      PUBLIC_API_URL: url,
       MINI_APP_URL: miniAppUrl,
       MINI_APP_ORIGIN: new URL(miniAppUrl).origin,
     };

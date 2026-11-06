@@ -8,6 +8,7 @@ export async function configureTelegramBot(
   await bot.telegram.setMyCommands([
     { command: 'start', description: 'Начать работу' },
     { command: 'app', description: 'Открыть приложение' },
+    { command: 'signer', description: 'Подключить подпись на Windows' },
     { command: 'id', description: 'Мой Telegram ID' },
     { command: 'help', description: 'Помощь' },
   ]);

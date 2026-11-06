@@ -154,7 +154,9 @@ const navigation = computed<
         />
         <OrdersView
           v-if="authenticated && stockAllowed && activePage === 'orders'"
+          :roles="roles"
           :init-data="initData"
+          @work-started="activePage = 'packing'"
         />
         <MarkingPipelineView
           v-if="authenticated && stockAllowed"

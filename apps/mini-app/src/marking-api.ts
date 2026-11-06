@@ -30,7 +30,7 @@ export const markingLabels: Record<string, string> = {
   SIGNATURE_PAYLOAD_MISMATCH: 'Подпись относится к другим байтам документа',
   LEASED: 'Задание у подписанта',
   RECEIVED: 'Подпись получена, но не проверена',
-  VERIFIED: 'Проверено в симуляции',
+  VERIFIED: 'Подпись проверена',
   IN_CIRCULATION: 'В обороте',
   WITHDRAWN: 'Выведен из оборота',
   UNKNOWN: 'Нет подтверждённых данных',
@@ -40,7 +40,16 @@ export const markingLabels: Record<string, string> = {
   RESERVED: 'В резерве',
   DEFECTIVE: 'Брак',
   IN_TRANSIT: 'В пути',
-  LEGAL_PROVIDER_DISABLED: 'Тестовый процесс выключен на сервере',
+  DOCUMENT_SUBMISSION_DISABLED: 'Отправка документов ЧЗ выключена владельцем',
+  AVITO_WRITES_DISABLED: 'Изменения Авито выключены владельцем',
+  CHZ_AUTH_REQUIRED: 'Требуется авторизация ЧЗ через подписант',
+  SIGNER_WAITING: 'Ожидаем подпись владельца',
+  SIGNER_CERTIFICATE_NOT_CONFIGURED: 'Не настроен сертификат подписанта',
+  SUBMISSION_RESULT_UNKNOWN: 'Результат отправки неизвестен — нужна сверка',
+  CHZ_PROCESSING: 'Документ обрабатывается в ЧЗ',
+  CHZ_CODE_RESPONSE_INCOMPLETE: 'ЧЗ не вернул результат по коду',
+  ORDER_MAPPING_REQUIRED: 'Укажите вариант товара для объявления',
+  LEGAL_PROVIDER_DISABLED: 'Интеграция не подключена',
   SUPPLY_NOT_CONFIRMED: 'Нет подтверждения документов поставщика',
   OWNERSHIP_NOT_VERIFIED: 'Не подтверждено право распоряжения товаром',
   CODE_NOT_IN_CIRCULATION: 'Код не готов к продаже',
@@ -66,7 +75,6 @@ export const markingLabels: Record<string, string> = {
   ENTITY_NOT_FOUND: 'Объект не найден',
   INVALID_REQUEST: 'Проверьте заполненные поля',
   IDEMPOTENCY_CONFLICT: 'Этот запрос уже использован с другими данными',
-  EVIDENCE_ENVIRONMENT_MISMATCH: 'Источник данных относится к другому режиму',
   PREPARATION_EXPIRED: 'Подготовка просрочена — нужна помощь владельца',
 };
 export const markingLabel = (value: string | null | undefined) =>
@@ -186,15 +194,13 @@ export function createMarkingApi(initData: string) {
       const response = markingReadSchema.parse(
         await fetchJson(`documents/${encodeURIComponent(id)}/export`),
       );
-      if (!response.simulated)
-        throw new MarkingApiError('Неожиданный режим экспорта', false);
       const blob = new Blob([JSON.stringify(response, null, 2)], {
         type: 'application/json',
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `TEST-document-${id}.json`;
+      a.download = `document-${id}.json`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     },

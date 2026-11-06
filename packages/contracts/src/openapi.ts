@@ -1,4 +1,7 @@
-import { signingOpenApiPaths } from './signing.js';
+import {
+  signingOpenApiPaths,
+  signerEnrollmentOpenApiPaths,
+} from './signing.js';
 import { markingOpenApiPaths } from './marking.js';
 import {
   ordersQuerySchema,
@@ -75,7 +78,7 @@ export function createPublicApiDocument() {
       title: 'Avito warehouse API',
       version: '1.0.0',
       description:
-        'Read-only live Avito orders, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. Marking pipeline commands are explicitly simulated; external mutations are disabled.',
+        'Read-only live Avito orders, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. Real Avito and Chestny ZNAK adapters, durable warehouse commands and managed Windows CryptoPro signing. External writes require explicit backend configuration.',
     },
     servers: [{ url: '/', description: 'The origin serving this API.' }],
     components: {
@@ -110,6 +113,7 @@ export function createPublicApiDocument() {
     paths: {
       ...markingOpenApiPaths(),
       ...signingOpenApiPaths(),
+      ...signerEnrollmentOpenApiPaths(),
       '/api/v1/orders': {
         get: {
           operationId: 'listAvitoOrders',

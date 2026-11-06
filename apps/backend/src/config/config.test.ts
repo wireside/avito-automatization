@@ -63,3 +63,38 @@ describe('Telegram runtime configuration', () => {
     ).toBe('webhook');
   });
 });
+
+it('rejects direct CHZ sending without a selected submission channel and pinned signer', () => {
+  expect(() =>
+    readConfig({
+      DATABASE_URL: 'postgresql://local/db',
+      REDIS_URL: 'redis://localhost:6379',
+      CHZ_DOCUMENT_SUBMISSION_ENABLED: 'true',
+      CHZ_SUBMISSION_MODE: 'AVITO_OFD',
+    }),
+  ).toThrow('Direct CHZ sending requires');
+});
+
+it('requires a public HTTPS API and encryption for Telegram installation', () => {
+  expect(() =>
+    readConfig({
+      ...bot,
+      TELEGRAM_MODE: 'polling',
+      SIGNER_TELEGRAM_ENROLLMENT_ENABLED: 'true',
+    }),
+  ).toThrow('Telegram signer setup');
+  const valid = {
+    ...bot,
+    TELEGRAM_MODE: 'polling',
+    SIGNER_TELEGRAM_ENROLLMENT_ENABLED: 'true',
+    PUBLIC_API_URL: 'https://api.example.com',
+    MARKING_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
+  };
+  expect(readConfig(valid).PUBLIC_API_URL).toBe('https://api.example.com');
+  expect(() =>
+    readConfig({
+      ...valid,
+      PUBLIC_API_URL: 'https://api.example.com/?token=secret',
+    }),
+  ).toThrow();
+});

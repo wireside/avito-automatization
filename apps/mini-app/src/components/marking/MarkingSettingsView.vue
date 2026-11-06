@@ -1,15 +1,20 @@
 <script setup lang="ts">
+import IntegrationStatusBanner from './IntegrationStatusBanner.vue';
 import { computed, ref } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import {
   settingsSchema,
   overviewSchema,
   type MarkingAction,
+  signerInstallLinkResponse,
 } from '@avito/contracts';
 import { createMarkingApi } from '../../marking-api';
 import MarkingActionDialog from './MarkingActionDialog.vue';
-import SimulationBanner from './SimulationBanner.vue';
-const props = defineProps<{ initData: string; active: boolean }>();
+const props = defineProps<{
+  initData: string;
+  active: boolean;
+  roles: string[];
+}>();
 const api = createMarkingApi(props.initData);
 const settings = useQuery({
   queryKey: ['marking', 'settings'],
@@ -21,6 +26,39 @@ const overview = useQuery({
   queryFn: ({ signal }) => api.read('overview', overviewSchema, signal),
   enabled: computed(() => props.active),
 });
+const installBusy = ref(false),
+  installUrl = ref(''),
+  installError = ref(''),
+  copied = ref(false);
+async function installSigner() {
+  installBusy.value = true;
+  installError.value = '';
+  try {
+    const r = await fetch(
+      `${import.meta.env.VITE_API_BASE_URL ?? ''}/api/v1/local-signer/install-link`,
+      {
+        method: 'POST',
+        headers: { authorization: `tma ${props.initData}` },
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    if (!r.ok) throw Error();
+    installUrl.value = signerInstallLinkResponse.parse(await r.json()).url;
+  } catch {
+    installError.value =
+      'Не удалось создать ссылку. Повторите через 10 секунд или отправьте нашему боту /signer.';
+  } finally {
+    installBusy.value = false;
+  }
+}
+async function copyInstallLink() {
+  try {
+    await navigator.clipboard.writeText(installUrl.value);
+    copied.value = true;
+  } catch {
+    installError.value = 'Скопируйте ссылку из поля ниже.';
+  }
+}
 const dialog = ref(false);
 const action = ref<MarkingAction>('configure');
 const defaults = ref<Record<string, string>>({});
@@ -40,12 +78,9 @@ function open(value: MarkingAction, row?: Record<string, string>) {
 </script>
 <template>
   <section>
+    <IntegrationStatusBanner :init-data="initData" />
     <h1 class="text-title-large mb-5">Настройки владельца</h1>
-    <SimulationBanner
-      v-if="settings.data.value"
-      :mode="settings.data.value.mode"
-      :simulated="settings.data.value.simulated"
-    /><v-alert v-if="settings.isError.value" type="error" class="mb-4"
+    <v-alert v-if="settings.isError.value" type="error" class="mb-4"
       >Не удалось загрузить настройки.<v-btn @click="settings.refetch()"
         >Повторить</v-btn
       ></v-alert
@@ -68,29 +103,19 @@ function open(value: MarkingAction, row?: Record<string, string>) {
             <p class="text-body-small text-muted mt-2 text-break">
               ФИАС: {{ row.fias_id }}
             </p>
-            <v-btn
-              v-if="settings.data.value?.mode === 'simulation'"
-              class="mt-3"
-              @click="open('configure', row)"
+            <v-btn class="mt-3" @click="open('configure', row)"
               >Изменить реквизиты</v-btn
             ></v-sheet
-          ><v-btn
-            v-if="settings.data.value?.mode === 'simulation'"
-            @click="open('configure')"
+          ><v-btn @click="open('configure')"
             >Добавить реквизиты склада</v-btn
           ></v-card
         ><v-card class="pa-5"
           ><h2 class="text-title-medium mb-4">Документы поставщика</h2>
           <p class="text-body-medium text-secondary mb-4">
-            Подтверждение передаётся одной пачкой для экземпляров. В этом режиме
-            это тестовые факты, а не подписание УПД. Закупочная стоимость не
-            требуется.
+            Укажите документ поставщика один раз для партии. Backend проверит
+            его обработку и состав в ЧЗ. Закупочная стоимость не требуется.
           </p>
-          <v-btn
-            v-if="settings.data.value?.mode === 'simulation'"
-            @click="open('supply')"
-            >Импортировать сведения</v-btn
-          ></v-card
+          <v-btn @click="open('supply')">Импортировать сведения</v-btn></v-card
         ></v-col
       ><v-col cols="12" md="5"
         ><v-card class="pa-5 mb-4"
@@ -105,25 +130,52 @@ function open(value: MarkingAction, row?: Record<string, string>) {
                 : 'Календарь не загружен'
             }}
           </p>
-          <v-btn
-            v-if="settings.data.value?.mode === 'simulation'"
-            class="mt-4"
-            @click="open('calendar')"
+          <v-btn class="mt-4" @click="open('calendar')"
             >Загрузить пакет дат</v-btn
           ></v-card
         ><v-card class="pa-5"
           ><h2 class="text-title-medium mb-4">Локальный подписант</h2>
-          <v-chip color="raised" class="text-secondary"
-            >Состояние подключения неизвестно</v-chip
+          <v-btn
+            v-if="roles.includes('OWNER')"
+            color="primary-strong"
+            :loading="installBusy"
+            @click="installSigner"
+            >Подключить Windows</v-btn
+          >
+          <p class="text-body-small text-secondary mt-3">
+            Или отправьте нашему Telegram-боту /signer. После запуска
+            установщика подтвердите компьютер кнопкой в боте.
+          </p>
+          <v-alert v-if="installError" type="warning" class="mt-3">{{
+            installError
+          }}</v-alert>
+          <template v-if="installUrl"
+            ><v-text-field
+              :model-value="installUrl"
+              readonly
+              label="Ссылка для Windows · 30 минут"
+              class="mt-3"
+            /><v-btn variant="text" @click="copyInstallLink">{{
+              copied ? 'Ссылка скопирована' : 'Скопировать ссылку'
+            }}</v-btn
+            ><v-btn
+              :href="installUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="text"
+              >Открыть установку</v-btn
+            ></template
+          >
+          <v-chip color="raised" class="mt-4 text-secondary"
+            >Состояние подключения показано выше</v-chip
           >
           <p class="text-body-medium text-secondary mt-4">
-            API пока не сообщает, находится ли агент в сети. Статус задания
-            подписи доступен в карточке документа.
+            Подписант работает на Windows-компьютере владельца с подключённым
+            токеном. Статус подписи доступен в карточке документа.
           </p>
           <p class="text-body-small text-muted mt-3">
-            Реальная криптографическая проверка ещё не подключена. Ключ УКЭП,
-            сертификат и PIN здесь не запрашиваются. Тестовая подпись не
-            является УКЭП.
+            Подпись и цепочку сертификата проверяет закреплённый Windows-агент
+            через КриптоПро. Ключ УКЭП и PIN остаются на компьютере владельца.
           </p></v-card
         ></v-col
       ></v-row

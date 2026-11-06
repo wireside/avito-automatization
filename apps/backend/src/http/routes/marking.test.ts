@@ -4,21 +4,12 @@ import { createMarkingPipeline, type PipelineStore } from '@avito/domain';
 import { buildApp } from '../app.js';
 const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
 afterEach(() => Promise.all(apps.splice(0).map((a) => a.close())));
-async function setup(
-  roles = ['OWNER'],
-  mode: 'disabled' | 'simulation' = 'simulation',
-) {
+async function setup(roles = ['OWNER']) {
   const store = {
-    execute: vi.fn().mockResolvedValue({
-      ok: true,
-      simulated: true,
-      replayed: false,
-      result: {},
-    }),
-    read: vi
+    execute: vi
       .fn()
-      .mockResolvedValue({ mode, simulated: mode === 'simulation', data: [] }),
-    run: vi.fn(),
+      .mockResolvedValue({ ok: true, replayed: false, result: {} }),
+    read: vi.fn().mockResolvedValue({ data: [] }),
     reconcile: vi.fn(),
   } satisfies PipelineStore;
   const app = await buildApp(
@@ -34,16 +25,16 @@ async function setup(
           user: { id: randomUUID(), telegramId: '1', displayName: null, roles },
         }),
       checkReadiness: () => Promise.resolve({ postgres: 'ok', redis: 'ok' }),
-      markingPipeline: createMarkingPipeline(store, mode),
+      markingPipeline: createMarkingPipeline(store),
     },
   );
   apps.push(app);
   return { app, store };
 }
 const headers = { authorization: 'tma signed' };
-it('authenticates before commands and rejects unknown fields and malformed IDs', async () => {
-  const { app, store } = await setup();
-  const url = '/api/v1/marking/commands/check';
+it('authenticates before commands and rejects undocumented fields', async () => {
+  const { app, store } = await setup(),
+    url = '/api/v1/marking/commands/check';
   expect(
     (await app.inject({ method: 'POST', url, payload: {} })).statusCode,
   ).toBe(401);
@@ -61,18 +52,9 @@ it('authenticates before commands and rejects unknown fields and malformed IDs',
       })
     ).statusCode,
   ).toBe(400);
-  expect(
-    (
-      await app.inject({
-        method: 'GET',
-        url: '/api/v1/marking/units/not-uuid',
-        headers,
-      })
-    ).statusCode,
-  ).toBe(400);
   expect(store.execute).not.toHaveBeenCalled();
 });
-it('keeps VIEWER read-only and restricts irreversible commands to administrators', async () => {
+it('keeps viewers read-only and protects document exports', async () => {
   const { app, store } = await setup(['VIEWER']);
   expect(
     (
@@ -93,33 +75,29 @@ it('keeps VIEWER read-only and restricts irreversible commands to administrators
       })
     ).statusCode,
   ).toBe(200);
-  expect(store.execute).not.toHaveBeenCalled();
-});
-it('defaults to no external mutations and exposes mode explicitly', async () => {
-  const { app, store } = await setup(['OWNER'], 'disabled');
   expect(
     (
       await app.inject({
-        method: 'POST',
-        url: '/api/v1/marking/commands/check',
+        method: 'GET',
+        url: '/api/v1/marking/documents/' + randomUUID() + '/export',
         headers,
-        payload: { requestId: randomUUID(), unitId: randomUUID() },
       })
     ).statusCode,
-  ).toBe(503);
+  ).toBe(403);
+  expect(store.execute).not.toHaveBeenCalled();
+});
+it('supports local configuration and publishes provider/agent contracts', async () => {
+  const { app } = await setup();
   const r = await app.inject({
     method: 'GET',
-    url: '/api/v1/marking/overview',
+    url: '/api/v1/marking/integrations',
     headers,
   });
   expect(r.headers['cache-control']).toBe('no-store');
-  expect(r.json()).toMatchObject({ mode: 'disabled', simulated: false });
-  expect(store.execute).not.toHaveBeenCalled();
-});
-it('publishes schemas for all commands and bounded reads', async () => {
-  const { app } = await setup();
-  const r = await app.inject('/api/v1/openapi.json');
-  const doc = r.json<{ paths: Record<string, unknown> }>();
+  const doc = (await app.inject('/api/v1/openapi.json')).json<{
+    paths: Record<string, unknown>;
+  }>();
+  expect(doc.paths['/api/v1/local-signer/heartbeat']).toBeDefined();
   expect(doc.paths['/api/v1/marking/commands/prepare']).toBeDefined();
-  expect(doc.paths['/api/v1/marking/units/{id}']).toBeDefined();
+  expect(doc.paths['/api/v1/marking/commands/simulate']).toBeUndefined();
 });

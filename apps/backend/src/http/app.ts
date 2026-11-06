@@ -1,3 +1,5 @@
+import { registerSignerEnrollmentRoutes } from './routes/signer-enrollment.js';
+import type { SignerEnrollment, SignerBinding } from '@avito/domain';
 import { registerLocalSignerRoutes } from './routes/local-signer.js';
 import type { LocalSignerService } from '@avito/domain';
 import { registerMarkingRoutes } from './routes/marking.js';
@@ -25,6 +27,14 @@ import {
 export interface HttpServices {
   localSigner?: LocalSignerService;
   localSignerToken?: string;
+  signerEnrollment?: SignerEnrollment;
+  signerInstaller?: (connection: {
+    backendUrl: string;
+    ticket: string;
+  }) => Promise<Uint8Array>;
+  authenticateSigner?: (
+    token: string,
+  ) => Promise<{ binding: SignerBinding; service: LocalSignerService } | null>;
   markingPipeline?: MarkingPipeline;
   verifyTelegramSession: (initData: string) => Promise<SessionResult>;
   checkReadiness: () => Promise<DependencyReadiness>;
@@ -58,10 +68,12 @@ export async function buildApp(
   registerOpenApiRoute(app);
   registerInventoryRoutes(app, services);
   registerMarkingRoutes(app, services);
+  registerSignerEnrollmentRoutes(app, services);
   registerLocalSignerRoutes(
     app,
     services.localSigner,
     services.localSignerToken,
+    services.authenticateSigner,
   );
   registerOrderRoutes(app, services);
   registerHealthRoutes(app, services.checkReadiness);

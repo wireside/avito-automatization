@@ -124,7 +124,7 @@ for (const width of [430, 1512]) {
     await page.setViewportSize({ width, height: 982 });
     const writes = await setup(page);
     await expect(
-      page.getByText('Только просмотр', { exact: true }).first(),
+      page.getByText('Данные Авито', { exact: true }).first(),
     ).toBeVisible();
     await expect(page.locator(`[data-order-id="${firstId}"]`)).toContainText(
       `№${firstId}`,
@@ -148,13 +148,10 @@ for (const width of [430, 1512]) {
       'TRACK-TEST-123',
     );
     await expect(
-      page.getByRole('button', { name: 'Подтверждение недоступно' }),
-    ).toBeDisabled();
+      page.getByRole('button', { name: 'Взять заказ в работу', exact: true }),
+    ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'PDF пока недоступен' }),
-    ).toBeDisabled();
-    await expect(
-      page.getByText(/Складской вариант и резерв не назначены/),
+      page.getByText(/Сопоставление со складом и резерв доступны/),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Обновить заказы' }).click();
     expect(writes).toEqual([]);
@@ -337,4 +334,104 @@ test('desktop row opens by clicking product and with Enter', async ({
   await row.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('order-tracking')).toBeVisible();
+});
+
+test('takes a real-order snapshot into packing, remembers the exact mapping request after a lost response', async ({
+  page,
+}) => {
+  await setup(page);
+  const variantId = '00000000-0000-4000-8000-000000000090';
+  await page.route('**/api/v1/inventory**', (r) =>
+    r.fulfill({
+      json: {
+        ok: true,
+        warehouse: {
+          id: '00000000-0000-4000-8000-000000000030',
+          name: 'Склад',
+        },
+        totals: { onHand: 1, available: 1, quarantine: 0 },
+        items: [
+          {
+            id: variantId,
+            productId: null,
+            productName: null,
+            article: null,
+            name: 'Джинсы прямые',
+            size: '48',
+            color: 'Синий',
+            gtins: ['04660430764543'],
+            onHand: 1,
+            available: 1,
+            quarantine: 0,
+            reserved: 0,
+            defective: 0,
+          },
+        ],
+        hasMore: false,
+      },
+    }),
+  );
+  const commands: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/marking/**', async (r) => {
+    const path = new URL(r.request().url()).pathname;
+    if (r.request().method() === 'POST') {
+      commands.push(r.request().postDataJSON() as Record<string, unknown>);
+      if (commands.length === 1) return r.abort('failed');
+      return r.fulfill({
+        json: {
+          ok: true,
+          replayed: true,
+          result: { shipmentId: '00000000-0000-4000-8000-000000000050' },
+        },
+      });
+    }
+    const data = path.endsWith('integrations')
+      ? {
+          avitoConfigured: true,
+          signerConfigured: true,
+          documentsEnabled: false,
+          avitoWritesEnabled: false,
+          seller_configured: true,
+          chz_authorized: true,
+          signer_online: true,
+          signer_last_seen_at: null,
+          certificate_expires_at: null,
+        }
+      : path.endsWith('overview')
+        ? { packed: 0, ready: 0, issues: 0, pending: 0, calendar_days: 40 }
+        : [];
+    return r.fulfill({ json: { data } });
+  });
+  await page
+    .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Взять заказ в работу', exact: true })
+    .click();
+  await page
+    .getByRole('combobox', {
+      name: 'Вариант на складе — только при первом сопоставлении',
+      exact: true,
+    })
+    .click();
+  await page.getByRole('option').filter({ hasText: '48' }).click();
+  await page
+    .getByRole('button', { name: 'Взять в работу', exact: true })
+    .click();
+  await expect.poll(() => commands.length).toBe(1);
+  await expect(
+    page.getByRole('button', { name: 'Взять в работу', exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole('button', { name: 'Взять в работу', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Очередь упаковки', exact: true }),
+  ).toBeVisible();
+  expect(commands[0]).toEqual(commands[1]);
+  expect(commands[0]).toEqual({
+    requestId: expect.any(String),
+    externalOrderId: firstId,
+    mappings: [{ externalItemId: '123456789', variantId }],
+  });
 });

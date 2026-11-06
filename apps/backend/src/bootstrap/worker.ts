@@ -1,3 +1,13 @@
+import { createSignerEnrollmentStore } from '@avito/database';
+import { createNotifySigner } from '@avito/domain';
+import { createSignerNotificationSender } from '../infrastructure/signer-notification.js';
+import { signerApprovalMessage } from '../telegram/signer-message.js';
+import { createAvitoReadLimiter } from '../infrastructure/avito-read-limiter.js';
+import { createMarkingWorkStore, createChzSessionStore } from '@avito/database';
+import { createMarkingExecutor } from '@avito/domain';
+import { createTrueApiClient } from '../infrastructure/true-api.js';
+import { createAvitoMarkingSender } from '../infrastructure/avito-markings.js';
+import { createChzAuthorization } from '../infrastructure/chz-authorization.js';
 import {
   createMarkingProtector,
   createMarkingUnprotector,
@@ -43,8 +53,55 @@ export function createWorkerRuntime(config: AppConfig) {
           }
         : undefined,
     ),
-    config.MARKING_PIPELINE_MODE,
   );
+  const protection = config.MARKING_ENCRYPTION_KEY
+    ? {
+        encrypt: createMarkingProtector(
+          config.MARKING_ENCRYPTION_KEY,
+          config.MARKING_ENCRYPTION_KEY_ID,
+        ),
+        decrypt: createMarkingUnprotector(
+          config.MARKING_ENCRYPTION_KEY,
+          config.MARKING_ENCRYPTION_KEY_ID,
+        ),
+      }
+    : undefined;
+  const registry = createSignerEnrollmentStore(database.db);
+  const sendNotice = createSignerNotificationSender(config.TELEGRAM_BOT_TOKEN);
+  const notifySigner = createNotifySigner(registry, (n) =>
+    sendNotice(n.telegramId, signerApprovalMessage(n)),
+  );
+  const sessions = createChzSessionStore(database.db, protection);
+  const legal = createTrueApiClient({
+    session: sessions,
+    submissionsEnabled: config.CHZ_DOCUMENT_SUBMISSION_ENABLED,
+  });
+  const authorize = createChzAuthorization(
+    sessions,
+    legal,
+    async () =>
+      !!(
+        !config.SIGNER_TELEGRAM_ENROLLMENT_ENABLED &&
+        config.LOCAL_SIGNER_TOKEN &&
+        config.LOCAL_SIGNER_CERTIFICATE_THUMBPRINT
+      ) ||
+      (config.SIGNER_TELEGRAM_ENROLLMENT_ENABLED &&
+        (await registry.hasActive())),
+  );
+  const executeMarking = createMarkingExecutor({
+    store: createMarkingWorkStore(database.db, protection),
+    legal,
+    sendMarkings: createAvitoMarkingSender({
+      clientId: config.AVITO_API_CLIENT_ID,
+      clientSecret: config.AVITO_API_CLIENT_SECRET,
+      writesEnabled: config.AVITO_WRITES_ENABLED,
+      acquireSlot: createAvitoReadLimiter(
+        queueConnection,
+        (config.AVITO_API_CLIENT_ID ?? 'unconfigured') + ':markings',
+      ),
+    }),
+    submissionsEnabled: config.CHZ_DOCUMENT_SUBMISSION_ENABLED,
+  });
   const worker = createIntegrationWorker(
     workerConnection,
     createProcessIntegrationOperation({
@@ -52,8 +109,10 @@ export function createWorkerRuntime(config: AppConfig) {
       retryDelay: calculateRetryDelay,
       execute: (operation) =>
         operation.operationType.startsWith('pipeline.')
-          ? pipeline.execute(operation.id)
-          : executeSystemOperation(operation),
+          ? executeMarking(operation.id)
+          : operation.operationType === 'signer.notify'
+            ? notifySigner(operation.id)
+            : executeSystemOperation(operation),
     }),
   );
   worker.on('completed', (job) =>
@@ -86,11 +145,17 @@ export function createWorkerRuntime(config: AppConfig) {
   return {
     logger,
     async start() {
+      await authorize().catch(() =>
+        logger.warn('CHZ authorization is waiting for a configured signer'),
+      );
       await pipeline.reconcile();
       await recoverOperations();
       recoveryTimer = setInterval(() => {
-        void pipeline
-          .reconcile()
+        void authorize()
+          .catch(() =>
+            logger.warn('CHZ authorization is waiting for a configured signer'),
+          )
+          .then(() => pipeline.reconcile())
           .then(recoverOperations)
           .catch(() => logger.error('Durable operation recovery failed'));
       }, 30_000);

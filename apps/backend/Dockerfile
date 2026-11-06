@@ -15,6 +15,7 @@ FROM dependencies AS build
 RUN pnpm --filter '@avito/backend...' install --frozen-lockfile
 COPY tsconfig.base.json ./
 COPY apps/backend apps/backend
+COPY apps/local-signer apps/local-signer
 COPY packages packages
 RUN pnpm --filter '@avito/backend...' build
 
@@ -26,6 +27,7 @@ WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0
 COPY --from=production-dependencies /app ./
 COPY --from=build /app/apps/backend/dist apps/backend/dist
+COPY --from=build /app/apps/local-signer apps/local-signer
 COPY --from=build /app/packages/contracts/dist packages/contracts/dist
 COPY --from=build /app/packages/database/dist packages/database/dist
 COPY --from=build /app/packages/database/migrations packages/database/migrations

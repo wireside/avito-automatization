@@ -16,6 +16,12 @@ const redactPaths = [
   '*.pin',
   '*.privateKey',
   '*.token',
+  '*.ticket',
+  '*.deviceTokenHash',
+  '*.certificateBase64',
+  'req.body.ticket',
+  'req.body.deviceTokenHash',
+  'req.body.certificateBase64',
 ];
 
 export function createLogger(

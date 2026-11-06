@@ -26,7 +26,7 @@ export function useMarkingCommand(initData: string) {
       pending.value = null;
       message.value = result.replayed
         ? 'Результат исходного запроса восстановлен.'
-        : 'Сохранено. Тестовая обработка продолжается.';
+        : 'Сохранено. Обработка продолжается в фоне.';
       await Promise.all([
         client.invalidateQueries({ queryKey: ['marking'] }),
         client.invalidateQueries({ queryKey: ['inventory'] }),

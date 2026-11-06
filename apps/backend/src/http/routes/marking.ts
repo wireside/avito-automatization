@@ -2,7 +2,6 @@ import { markingRequests, markingQuery, markingParams } from '@avito/contracts';
 import {
   PipelineError,
   type MarkingPipeline,
-  type PipelineAction,
   type SessionResult,
 } from '@avito/domain';
 import type { FastifyInstance } from 'fastify';
@@ -34,7 +33,9 @@ export function registerMarkingRoutes(
       },
     };
   };
-  for (const action of Object.keys(markingRequests) as PipelineAction[])
+  for (const action of Object.keys(
+    markingRequests,
+  ) as (keyof typeof markingRequests)[])
     app.post(
       '/api/v1/marking/commands/' + action,
       { bodyLimit: 262144 },
@@ -70,6 +71,7 @@ export function registerMarkingRoutes(
     );
   const routes = [
     ['overview', 'overview'],
+    ['integrations', 'integrations'],
     ['shipments', 'shipments'],
     ['shipments/:id', 'shipment'],
     ['units/:id', 'unit'],

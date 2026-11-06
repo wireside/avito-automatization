@@ -48,15 +48,11 @@ const owner = computed(() =>
     ><template v-if="state.data.value"
       ><p class="text-title-small">
         {{
-          state.data.value.mode === 'disabled'
-            ? 'Юридическая проверка не подключена'
-            : !state.data.value.data.blockers.length
-              ? state.data.value.simulated
-                ? 'Готов в тестовом процессе'
-                : 'Готов к продаже'
-              : state.data.value.data.received_legally
-                ? 'Нужна помощь'
-                : 'Проверяем документы'
+          !state.data.value.data.blockers.length
+            ? 'Готов к продаже'
+            : state.data.value.data.received_legally
+              ? 'Нужна помощь'
+              : 'Проверяем документы'
         }}
       </p>
       <p class="text-body-small mt-2">
@@ -68,12 +64,11 @@ const owner = computed(() =>
       <p class="text-body-small text-muted mt-1">
         Проверка: {{ displayDate(state.data.value.data.observed_at) }}
       </p>
-      <p class="text-body-small text-primary mt-2">
-        {{
-          state.data.value.simulated
-            ? 'Источник: симуляция, не юридическое доказательство.'
-            : 'Нет подтверждённого юридического источника.'
-        }}
+      <p
+        v-if="state.data.value.data.observed_at"
+        class="text-body-small text-primary mt-2"
+      >
+        {{ 'Сведения получены из Честного знака' }}
       </p>
       <p
         v-for="b in state.data.value.data.blockers"
@@ -89,10 +84,7 @@ const owner = computed(() =>
         :uncertain="!!cmd.pending.value"
         @retry="cmd.retry()"
       />
-      <div
-        v-if="state.data.value.mode === 'simulation'"
-        class="d-flex flex-wrap ga-2 mt-3"
-      >
+      <div class="d-flex flex-wrap ga-2 mt-3">
         <v-btn
           v-if="canCheck"
           :disabled="cmd.busy.value || !!cmd.pending.value"

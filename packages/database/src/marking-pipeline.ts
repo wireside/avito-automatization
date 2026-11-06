@@ -6,7 +6,6 @@ import {
   dispatchDeadline,
   legalBlockers,
   requirePipeline,
-  type PipelineMode,
   type PipelineStore,
 } from '@avito/domain';
 import type { Database } from './client.js';
@@ -81,12 +80,6 @@ async function issue(tx: Tx, code: string, id: string, details: Row = {}) {
     sql`INSERT INTO marking_issues(key,code,entity_id,details) VALUES(${code + ':' + id},${code},${id},${JSON.stringify(details)}::jsonb) ON CONFLICT(key) DO UPDATE SET resolved_at=NULL, details=excluded.details`,
   );
 }
-async function resolve(tx: Tx, id: string, codes: string[]) {
-  for (const code of codes)
-    await tx.execute(
-      sql`UPDATE marking_issues SET resolved_at=now() WHERE entity_id=${id} AND code=${code} AND resolved_at IS NULL`,
-    );
-}
 async function unit(tx: Tx | Database, id: string, lock = false) {
   if (lock)
     await tx.execute(
@@ -96,13 +89,12 @@ async function unit(tx: Tx | Database, id: string, lock = false) {
     tx,
     sql`SELECT u.id,u.variant_id,u.current_state,u.current_location_id,u.movement_revision,u.internal_code,m.id AS marking_id,m.identity_hash,m.masked_code,coalesce(l.warehouse_id,(SELECT sr.warehouse_id FROM cost_layers cl JOIN stock_receipt_items ri ON ri.id=cl.receipt_item_id JOIN stock_receipts sr ON sr.id=ri.receipt_id WHERE cl.id=u.cost_layer_id)) AS warehouse_id,
     ms.state AS legal_state,ms.ownership_verified,ms.observed_at,
-    EXISTS(SELECT 1 FROM marking_supply_evidence e WHERE e.unit_id=u.id AND e.verified_at IS NOT NULL AND e.simulated) AS received_legally,
-    ((SELECT e.source FROM unit_marking_events e WHERE e.marking_id=m.id ORDER BY e.observed_at DESC,e.id DESC LIMIT 1)='SIMULATION') AS simulated,
+    EXISTS(SELECT 1 FROM marking_supply_evidence e WHERE e.unit_id=u.id AND e.verified_at IS NOT NULL) AS received_legally,
     EXISTS(SELECT 1 FROM chz_operations co WHERE co.marking_id=m.id AND co.status IN ${active}) AS pending
-    FROM product_units u JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL LEFT JOIN stock_locations l ON l.id=u.current_location_id LEFT JOIN current_marking_states ms ON ms.marking_id=m.id WHERE u.id=${id}`,
+    FROM product_units u JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL LEFT JOIN stock_locations l ON l.id=u.current_location_id LEFT JOIN LATERAL (SELECT state,ownership_verified,observed_at FROM unit_marking_events WHERE marking_id=m.id AND source='TRUE_API' ORDER BY observed_at DESC,id DESC LIMIT 1) ms ON true WHERE u.id=${id}`,
   );
 }
-function blockers(u: Row, mode: PipelineMode) {
+function blockers(u: Row) {
   return legalBlockers(
     {
       physicalState: s(u, 'current_state'),
@@ -111,10 +103,8 @@ function blockers(u: Row, mode: PipelineMode) {
       receivedLegally: u.received_legally === true,
       observedAt: s(u, 'observed_at') || null,
       pending: u.pending === true,
-      simulated: u.simulated === true,
     },
     new Date(),
-    mode,
   );
 }
 async function movement(
@@ -148,7 +138,7 @@ async function shipment(tx: Tx | Database, id: string, lock = false) {
 async function composition(tx: Tx | Database, shipmentId: string) {
   return rows(
     tx,
-    sql`SELECT si.id AS shipment_item_id,si.unit_id,si.sale_cycle_id,sc.reservation_id,a.id AS assignment_id,a.packed_at,a.avito_marking_status,oi.unit_price_kopecks,u.current_state AS physical_state,v.name,v.size_label,v.color,m.masked_code,ms.state AS legal_state,(SELECT status FROM chz_operations WHERE sale_cycle_id=sc.id ORDER BY created_at DESC,id DESC LIMIT 1) AS legal_operation_status,(SELECT min(submission_due_at) FROM chz_operations WHERE sale_cycle_id=sc.id) AS submission_due_at FROM shipment_items si JOIN sale_cycles sc ON sc.id=si.sale_cycle_id JOIN order_items oi ON oi.id=sc.order_item_id JOIN order_unit_assignments a ON a.sale_cycle_id=sc.id JOIN product_units u ON u.id=si.unit_id JOIN product_variants v ON v.id=u.variant_id JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL LEFT JOIN current_marking_states ms ON ms.marking_id=m.id WHERE si.shipment_id=${shipmentId} AND si.removed_at IS NULL ORDER BY si.unit_id`,
+    sql`SELECT si.id AS shipment_item_id,si.unit_id,si.sale_cycle_id,sc.reservation_id,a.id AS assignment_id,a.packed_at,a.avito_marking_status,oi.unit_price_kopecks,u.current_state AS physical_state,v.name,v.size_label,v.color,m.masked_code,ms.state AS legal_state,(SELECT status FROM chz_operations WHERE sale_cycle_id=sc.id ORDER BY created_at DESC,id DESC LIMIT 1) AS legal_operation_status,(SELECT min(submission_due_at) FROM chz_operations WHERE sale_cycle_id=sc.id) AS submission_due_at FROM shipment_items si JOIN sale_cycles sc ON sc.id=si.sale_cycle_id JOIN order_items oi ON oi.id=sc.order_item_id JOIN order_unit_assignments a ON a.sale_cycle_id=sc.id JOIN product_units u ON u.id=si.unit_id JOIN product_variants v ON v.id=u.variant_id JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL LEFT JOIN LATERAL (SELECT state FROM unit_marking_events WHERE marking_id=m.id AND source='TRUE_API' ORDER BY observed_at DESC,id DESC LIMIT 1) ms ON true WHERE si.shipment_id=${shipmentId} AND si.removed_at IS NULL ORDER BY si.unit_id`,
   );
 }
 async function makeDocument(
@@ -230,13 +220,13 @@ async function makeDocument(
   const encrypted = protection.encrypt(bytes, 'document:' + documentId);
 
   await tx.execute(
-    sql`INSERT INTO chz_documents(id,submission_mode,action,warehouse_id,schema_version,payload_hash,last_operation_id) VALUES(${documentId},'DIRECT_TRUE_API',${action}::chz_action,${warehouseId}::uuid,'simulation-lp-v1',${payloadHash},${op})`,
+    sql`INSERT INTO chz_documents(id,submission_mode,action,warehouse_id,schema_version,payload_hash,last_operation_id) VALUES(${documentId},'DIRECT_TRUE_API',${action}::chz_action,${warehouseId}::uuid,'lp-true-api-747',${payloadHash},${op})`,
   );
   await tx.execute(
     sql`INSERT INTO marking_document_artifacts(document_id,document_type,payload_ciphertext,encryption_key_id,identity_hash,payload_hash,byte_length) VALUES(${documentId},${draft.type},${encrypted.payloadCiphertext},${encrypted.encryptionKeyId},${encrypted.identityHash},${payloadHash},${Buffer.byteLength(bytes)})`,
   );
   await tx.execute(
-    sql`INSERT INTO marking_signing_tasks(document_id,seller_inn,simulated) VALUES(${documentId},${s(settings, 'seller_inn')},true)`,
+    sql`INSERT INTO signer_jobs(document_id,purpose,document_type,seller_inn,payload_ciphertext,encryption_key_id,identity_hash,payload_hash,expires_at) VALUES(${documentId},'DOCUMENT',${draft.type},${s(settings, 'seller_inn')},${encrypted.payloadCiphertext},${encrypted.encryptionKeyId},${encrypted.identityHash},${payloadHash},now()+interval '30 minutes')`,
   );
   const job = await enqueue(
     tx,
@@ -271,44 +261,23 @@ async function calendar(tx: Tx | Database) {
     result[s(r, 'date')] = r.working === true;
   return result;
 }
-async function checkUnit(tx: Tx, unitId: string, op: string) {
-  const u = await unit(tx, unitId, true);
-  const facts = (
-    await rows(
-      tx,
-      sql`SELECT f.*,st.seller_inn FROM marking_simulation_units f CROSS JOIN marking_pipeline_settings st JOIN warehouses w ON w.id=st.warehouse_id WHERE f.unit_id=${unitId} AND st.warehouse_id=coalesce(${s(u, 'warehouse_id') || null}::uuid,st.warehouse_id) ORDER BY st.warehouse_id LIMIT 1`,
-    )
-  )[0];
-  if (!facts) {
-    await issue(tx, 'LEGAL_FACTS_MISSING', unitId);
-    return;
-  }
-  const state =
-    s(facts, 'provider_state') === 'INTRODUCED'
-      ? 'IN_CIRCULATION'
-      : s(facts, 'provider_state') === 'RETIRED'
-        ? 'WITHDRAWN'
-        : 'OTHER';
-  const owner = facts.owner_inn === facts.seller_inn ? 'VERIFIED' : 'REJECTED';
-  await tx.execute(
-    sql`INSERT INTO unit_marking_events(marking_id,state,provider_state,source,source_event_id,ownership_verified,operation_id,observed_at) VALUES(${s(u, 'marking_id')},${state}::chz_legal_state,${s(facts, 'provider_state')},'SIMULATION',${op + ':' + unitId},${owner},${op},now()) ON CONFLICT(source,source_event_id) DO NOTHING`,
-  );
-  if (owner === 'VERIFIED' && state === 'IN_CIRCULATION') {
-    await tx.execute(
-      sql`UPDATE marking_supply_evidence SET verified_at=now() WHERE unit_id=${unitId} AND simulated`,
-    );
-    await resolve(tx, unitId, ['LEGAL_FACTS_MISSING', 'LEGAL_CODE_BLOCKED']);
-  } else
-    await issue(tx, 'LEGAL_CODE_BLOCKED', unitId, { state, ownership: owner });
-}
-
 export function createMarkingPipelineStore(
   db: Database,
   protection?: PipelineProtection,
+  capabilities: {
+    avitoConfigured: boolean;
+    signerConfigured: boolean;
+    documentsEnabled: boolean;
+    avitoWritesEnabled: boolean;
+  } = {
+    avitoConfigured: false,
+    signerConfigured: false,
+    documentsEnabled: false,
+    avitoWritesEnabled: false,
+  },
 ): PipelineStore {
   return {
-    async execute(action, input, actorId, mode) {
-      requirePipeline(mode === 'simulation', 'LEGAL_PROVIDER_DISABLED');
+    async execute(action, input, actorId) {
       return db.transaction(async (tx) => {
         // One bounded writer lane prevents opposite lock orders across multi-unit workflows.
         await tx.execute(sql`SELECT pg_advisory_xact_lock(19378041)`);
@@ -327,13 +296,30 @@ export function createMarkingPipelineStore(
           );
           return {
             ok: true,
-            simulated: true,
             replayed: true,
             result: previous.result,
           };
         }
         let result: Row = {};
         if (action === 'configure') {
+          requirePipeline(
+            !(
+              await rows(
+                tx,
+                sql`SELECT id FROM signer_installations WHERE status='ACTIVE' AND seller_inn<>${String(input.sellerInn)}`,
+              )
+            ).length,
+            'SIGNATURE_INN_MISMATCH',
+          );
+          requirePipeline(
+            !(
+              await rows(
+                tx,
+                sql`SELECT warehouse_id FROM marking_pipeline_settings WHERE seller_inn<>${String(input.sellerInn)}`,
+              )
+            ).length,
+            'SELLER_ACCOUNT_MISMATCH',
+          );
           const current = (
             await rows(
               tx,
@@ -385,12 +371,13 @@ export function createMarkingPipelineStore(
             requirePipeline(
               !existing ||
                 (existing.document_number === input.documentNumber &&
+                  existing.document_date === input.documentDate &&
                   existing.supplier_inn === input.supplierInn &&
                   existing.evidence_reference === input.evidenceReference),
               'SUPPLY_EVIDENCE_CONFLICT',
             );
             await tx.execute(
-              sql`INSERT INTO marking_supply_evidence(unit_id,document_number,document_date,supplier_inn,evidence_reference,simulated) VALUES(${id},${String(input.documentNumber)},${String(input.documentDate)},${String(input.supplierInn)},${String(input.evidenceReference)},true) ON CONFLICT(unit_id) DO NOTHING`,
+              sql`INSERT INTO marking_supply_evidence(unit_id,document_number,document_date,supplier_inn,evidence_reference,provider_document_id) VALUES(${id},${String(input.documentNumber)},${String(input.documentDate)},${String(input.supplierInn)},${String(input.evidenceReference)},${String(input.evidenceReference)}) ON CONFLICT(unit_id) DO UPDATE SET provider_document_id=coalesce(marking_supply_evidence.provider_document_id,excluded.provider_document_id)`,
             );
             await enqueue(
               tx,
@@ -400,20 +387,6 @@ export function createMarkingPipelineStore(
             );
           }
           result = { unitIds: ids, status: 'VERIFICATION_PENDING' };
-        } else if (action === 'simulate') {
-          await unit(tx, String(input.unitId), true);
-          await tx.execute(
-            sql`INSERT INTO marking_simulation_units(unit_id,provider_state,owner_inn,outcome) VALUES(${String(input.unitId)},${String(input.state)},${String(input.ownerInn)},${String(input.outcome)}) ON CONFLICT(unit_id) DO UPDATE SET provider_state=excluded.provider_state,owner_inn=excluded.owner_inn,outcome=excluded.outcome,updated_at=now()`,
-          );
-          result = {
-            unitId: input.unitId,
-            operationId: await enqueue(
-              tx,
-              'pipeline.check',
-              String(input.unitId),
-              'pipeline.simulate:' + requestKey,
-            ),
-          };
         } else if (action === 'check') {
           await unit(tx, String(input.unitId), true);
           result = {
@@ -443,7 +416,7 @@ export function createMarkingPipelineStore(
           );
           const channel = await first(
             tx,
-            sql`INSERT INTO sales_channels(provider,external_account_id,name) VALUES('AVITO_SIMULATION',${String(input.externalAccountId)},'Авито — симуляция') ON CONFLICT(provider,external_account_id) DO UPDATE SET name=excluded.name RETURNING id`,
+            sql`INSERT INTO sales_channels(provider,external_account_id,name) VALUES('AVITO',${String(input.externalAccountId)},'Авито') ON CONFLICT(provider,external_account_id) DO UPDATE SET name=excluded.name RETURNING id`,
           );
           requirePipeline(
             !(
@@ -457,7 +430,7 @@ export function createMarkingPipelineStore(
           const orderId = randomUUID(),
             shipmentId = randomUUID();
           await tx.execute(
-            sql`INSERT INTO orders(id,channel_id,external_order_id,status,provider_status,available_actions,ordered_at,provider_updated_at,last_operation_id) VALUES(${orderId},${s(channel, 'id')},${String(input.externalOrderId)},'NEW','ready_to_ship','["setMarkings"]'::jsonb,now(),now(),${op})`,
+            sql`INSERT INTO orders(id,channel_id,external_order_id,status,provider_status,available_actions,ordered_at,provider_updated_at,last_operation_id) VALUES(${orderId},${s(channel, 'id')},${String(input.externalOrderId)},'NEW',${String(input.providerStatus)},${JSON.stringify(input.availableActions ?? [])}::jsonb,now(),${String(input.providerUpdatedAt)}::timestamptz,${op})`,
           );
           await tx.execute(
             sql`INSERT INTO shipments(id,order_id,warehouse_id,parcel_code,last_operation_id) VALUES(${shipmentId},${orderId},${warehouseId},${String(input.parcelCode)},${op})`,
@@ -470,7 +443,7 @@ export function createMarkingPipelineStore(
             );
             const candidates = await rows(
               tx,
-              sql`SELECT u.id FROM product_units u JOIN stock_unit_availability av ON av.unit_id=u.id JOIN current_marking_states ms ON ms.marking_id=(SELECT m.id FROM unit_markings m WHERE m.unit_id=u.id AND m.retired_at IS NULL) JOIN marking_supply_evidence e ON e.unit_id=u.id WHERE u.variant_id=${String(line.variantId)} AND av.warehouse_id=${warehouseId} AND av.is_eligible AND av.reservation_id IS NULL AND e.simulated AND e.verified_at IS NOT NULL AND ms.state='IN_CIRCULATION' AND ms.ownership_verified='VERIFIED' AND ms.observed_at>now()-interval '15 minutes' ORDER BY u.id FOR UPDATE OF u`,
+              sql`SELECT u.id FROM product_units u JOIN stock_unit_availability av ON av.unit_id=u.id JOIN LATERAL (SELECT me.state,me.ownership_verified,me.observed_at FROM unit_marking_events me JOIN unit_markings m ON m.id=me.marking_id WHERE m.unit_id=u.id AND m.retired_at IS NULL AND me.source='TRUE_API' ORDER BY me.observed_at DESC,me.id DESC LIMIT 1) ms ON true JOIN marking_supply_evidence e ON e.unit_id=u.id WHERE u.variant_id=${String(line.variantId)} AND av.warehouse_id=${warehouseId} AND av.is_eligible AND av.reservation_id IS NULL AND e.verified_at IS NOT NULL AND ms.state='IN_CIRCULATION' AND ms.ownership_verified='VERIFIED' AND ms.observed_at>now()-interval '15 minutes' ORDER BY u.id FOR UPDATE OF u`,
             );
             requirePipeline(
               candidates.length >= Number(line.quantity),
@@ -484,7 +457,7 @@ export function createMarkingPipelineStore(
                 reservationId = randomUUID(),
                 cycleId = randomUUID();
               const u = await unit(tx, unitId, true);
-              const blocked = blockers(u, mode);
+              const blocked = blockers(u);
               requirePipeline(!blocked.length, 'LEGAL_NOT_READY', blocked);
               await tx.execute(
                 sql`INSERT INTO inventory_reservations(id,order_item_id,unit_id,variant_id,warehouse_id,last_operation_id) VALUES(${reservationId},${itemId},${unitId},${String(line.variantId)},${warehouseId},${op})`,
@@ -537,7 +510,7 @@ export function createMarkingPipelineStore(
             const item = items.find((i) => i.unit_id === found.unit_id);
             requirePipeline(item, 'WRONG_UNIT');
             const u = await unit(tx, s(item, 'unit_id'), true);
-            const blocked = blockers(u, mode);
+            const blocked = blockers(u);
             requirePipeline(!blocked.length, 'LEGAL_NOT_READY', blocked);
             if (!item.packed_at) {
               const op = await header(
@@ -578,7 +551,7 @@ export function createMarkingPipelineStore(
                 'MARKINGS_NOT_ACCEPTED',
               );
               const u = await unit(tx, s(item, 'unit_id'), true);
-              const blocked = blockers(u, mode);
+              const blocked = blockers(u);
               requirePipeline(!blocked.length, 'LEGAL_NOT_READY', blocked);
             }
             const op = await header(
@@ -622,19 +595,13 @@ export function createMarkingPipelineStore(
               outside || sh.status === 'READY',
               'LEGAL_NOT_READY',
             );
-            requirePipeline(
-              outside ||
-                Date.now() - Date.parse(s(sh, 'prepared_at')) <= 30 * 60_000,
-              'PREPARATION_EXPIRED',
-            );
             if (!outside)
               for (const item of items) {
                 const u = await unit(tx, s(item, 'unit_id'), true);
                 requirePipeline(
                   u.legal_state === 'WITHDRAWN' &&
                     u.ownership_verified === 'VERIFIED' &&
-                    u.pending !== true &&
-                    u.simulated === true,
+                    u.pending !== true,
                   'LEGAL_NOT_READY',
                 );
               }
@@ -741,6 +708,38 @@ export function createMarkingPipelineStore(
               !sh.handed_over_at && sh.status !== 'CANCELLED',
               'USE_RETURN_WORKFLOW',
             );
+            const abandoned = await rows(
+              tx,
+              sql`SELECT DISTINCT d.id FROM chz_documents d JOIN chz_document_items di ON di.document_id=d.id JOIN chz_operations co ON co.id=di.chz_operation_id WHERE co.shipment_id=${shipmentId} AND d.submission_started_at IS NULL AND d.external_document_id IS NULL AND d.status IN ('PREPARING','WAITING_SIGNATURE')`,
+            );
+            if (abandoned.length) {
+              const cancelOp = await header(
+                tx,
+                actorId,
+                'MARKING',
+                'cancel-signature:' + requestKey,
+                String(input.reason),
+              );
+              for (const doc of abandoned) {
+                const locked = await rows(
+                  tx,
+                  sql`SELECT id FROM chz_documents WHERE id=${s(doc, 'id')} AND submission_started_at IS NULL FOR UPDATE`,
+                );
+                if (!locked.length) continue;
+                await tx.execute(
+                  sql`UPDATE chz_operations SET status='CANCELLED',last_operation_id=${cancelOp} WHERE id IN(SELECT chz_operation_id FROM chz_document_items WHERE document_id=${s(doc, 'id')}) AND status IN ('PREPARING','WAITING_SIGNATURE')`,
+                );
+                await tx.execute(
+                  sql`UPDATE chz_document_items SET status='CANCELLED',last_operation_id=${cancelOp} WHERE document_id=${s(doc, 'id')}`,
+                );
+                await tx.execute(
+                  sql`UPDATE chz_documents SET status='CANCELLED',last_operation_id=${cancelOp} WHERE id=${s(doc, 'id')}`,
+                );
+                await tx.execute(
+                  sql`UPDATE signer_jobs SET status='EXPIRED' WHERE document_id=${s(doc, 'id')}`,
+                );
+              }
+            }
             for (const item of items) {
               const u = await unit(tx, s(item, 'unit_id'), true);
               requirePipeline(
@@ -752,7 +751,7 @@ export function createMarkingPipelineStore(
               !(
                 await rows(
                   tx,
-                  sql`SELECT d.id FROM chz_documents d JOIN chz_document_items di ON di.document_id=d.id JOIN chz_operations co ON co.id=di.chz_operation_id WHERE co.shipment_id=${shipmentId} AND co.action='WITHDRAW' AND d.status<>'CONFIRMED'`,
+                  sql`SELECT d.id FROM chz_documents d JOIN chz_document_items di ON di.document_id=d.id JOIN chz_operations co ON co.id=di.chz_operation_id WHERE co.shipment_id=${shipmentId} AND co.action='WITHDRAW' AND d.status NOT IN ('CONFIRMED','CANCELLED')`,
                 )
               ).length,
               'CANCELLATION_REQUIRES_REVIEW',
@@ -1093,24 +1092,51 @@ export function createMarkingPipelineStore(
               'pipeline.retry:' + requestKey,
             ),
           };
+          await tx.execute(
+            sql`UPDATE integration_operations SET status='CANCELLED',updated_at=now() WHERE id=${String(input.operationId)}`,
+          );
+          await tx.execute(
+            sql`UPDATE marking_issues SET resolved_at=now() WHERE entity_id=${String(input.operationId)}::uuid AND code='JOB_FAILED'`,
+          );
         }
         await tx.execute(
-          sql`INSERT INTO audit_log(actor_type,actor_id,action,entity_type,entity_id,source,reason,metadata,correlation_id) VALUES('USER',${actorId},${'marking.' + action},'marking_pipeline',${s(result, 'shipmentId') || s(result, 'unitId') || input.requestId},'marking-pipeline',${typeof input.reason === 'string' ? input.reason : null},${JSON.stringify({ simulated: true, requestId: input.requestId })}::jsonb,${randomUUID()})`,
+          sql`INSERT INTO audit_log(actor_type,actor_id,action,entity_type,entity_id,source,reason,metadata,correlation_id) VALUES('USER',${actorId},${'marking.' + action},'marking_pipeline',${s(result, 'shipmentId') || s(result, 'unitId') || input.requestId},'marking-pipeline',${typeof input.reason === 'string' ? input.reason : null},${JSON.stringify({ requestId: input.requestId })}::jsonb,${randomUUID()})`,
         );
         await tx.execute(
           sql`INSERT INTO marking_command_results(actor_id,request_id,fingerprint,result) VALUES(${actorId},${input.requestId},${fingerprint},${JSON.stringify(result)}::jsonb)`,
         );
-        return { ok: true, simulated: true, replayed: false, result };
+        return { ok: true, replayed: false, result };
       });
     },
-    async read(kind, id, offset, mode) {
+    async read(kind, id, offset) {
       let data: unknown;
-      if (kind === 'export') {
+      if (kind === 'integrations') {
+        const state = await first(
+          db,
+          sql`SELECT EXISTS(SELECT 1 FROM marking_pipeline_settings) AS seller_configured,EXISTS(SELECT 1 FROM chz_sessions WHERE expires_at>now()+interval '2 minutes') AS chz_authorized,EXISTS(SELECT 1 FROM signer_installations i WHERE i.status='ACTIVE' AND i.certificate_expires_at>now()) AS signer_registered,EXISTS(SELECT 1 FROM signer_devices sd WHERE sd.ready AND sd.last_seen_at>now()-interval '60 seconds' AND sd.certificate_expires_at>now() AND (${capabilities.signerConfigured} OR EXISTS(SELECT 1 FROM signer_installations i WHERE i.signer_id=sd.signer_id AND i.certificate_thumbprint=sd.certificate_thumbprint AND i.status='ACTIVE'))) AS signer_online,(SELECT max(last_seen_at) FROM signer_devices) AS signer_last_seen_at,(SELECT min(certificate_expires_at) FROM signer_devices) AS certificate_expires_at`,
+        );
+        data = {
+          ...capabilities,
+          ...state,
+          signerConfigured:
+            capabilities.signerConfigured || state.signer_registered === true,
+          signer_online:
+            (capabilities.signerConfigured ||
+              state.signer_registered === true) &&
+            state.signer_online === true,
+        };
+      } else if (kind === 'export') {
         requirePipeline(protection, 'MARKING_STORAGE_NOT_CONFIGURED');
         const artifact = await first(
           db,
-          sql`SELECT a.*,t.status AS signing_status,t.signature_ciphertext,t.signature_key_id,t.signature_identity_hash,t.verification_source,d.status AS document_status,d.external_document_id FROM marking_document_artifacts a JOIN chz_documents d ON d.id=a.document_id LEFT JOIN marking_signing_tasks t ON t.document_id=d.id WHERE a.document_id=${id!}`,
+          sql`SELECT a.*,t.status AS signing_status,t.signature_ciphertext,t.signature_key_id,t.signature_identity_hash,CASE WHEN t.status='VERIFIED' THEN 'WINDOWS_CRYPTOPRO' ELSE NULL END AS verification_source,d.status AS document_status,d.external_document_id FROM marking_document_artifacts a JOIN chz_documents d ON d.id=a.document_id LEFT JOIN signer_jobs t ON t.document_id=d.id WHERE a.document_id=${id!}`,
         );
+        const receipt = (
+          await rows(
+            db,
+            sql`SELECT * FROM marking_provider_receipts WHERE document_id=${id!} ORDER BY created_at DESC,id DESC LIMIT 1`,
+          )
+        )[0];
         const raw = protection.decrypt(
           s(artifact, 'payload_ciphertext'),
           s(artifact, 'encryption_key_id'),
@@ -1131,7 +1157,21 @@ export function createMarkingPipelineStore(
           verificationSource: artifact.verification_source,
           documentStatus: artifact.document_status,
           externalDocumentId: artifact.external_document_id,
-          legalCompleted: false,
+          legalCompleted:
+            artifact.document_status === 'CONFIRMED' &&
+            artifact.signing_status === 'VERIFIED',
+          ...(receipt
+            ? {
+                providerReceiptBase64: Buffer.from(
+                  protection.decrypt(
+                    s(receipt, 'payload_ciphertext'),
+                    s(receipt, 'encryption_key_id'),
+                    s(receipt, 'identity_hash'),
+                  ),
+                ).toString('base64'),
+                providerReceiptHash: receipt.payload_hash,
+              }
+            : {}),
           ...(artifact.signature_ciphertext
             ? {
                 signatureEnvelopeBase64: Buffer.from(
@@ -1147,7 +1187,7 @@ export function createMarkingPipelineStore(
       } else if (kind === 'document') {
         const doc = await first(
           db,
-          sql`SELECT d.*,t.status AS signing_status,t.seller_inn,t.verification_source,t.verified_at FROM chz_documents d LEFT JOIN marking_signing_tasks t ON t.document_id=d.id WHERE d.id=${id!}`,
+          sql`SELECT d.*,t.status AS signing_status,t.seller_inn,CASE WHEN t.status='VERIFIED' THEN 'WINDOWS_CRYPTOPRO' ELSE NULL END AS verification_source,t.verified_at FROM chz_documents d LEFT JOIN signer_jobs t ON t.document_id=d.id WHERE d.id=${id!}`,
         );
         data = {
           ...doc,
@@ -1158,7 +1198,7 @@ export function createMarkingPipelineStore(
         };
       } else if (kind === 'unit') {
         const u = await unit(db, id!);
-        data = { ...u, blockers: blockers(u, mode) };
+        data = { ...u, blockers: blockers(u) };
       } else if (kind === 'shipment') {
         data = {
           ...(await shipment(db, id!)),
@@ -1167,12 +1207,12 @@ export function createMarkingPipelineStore(
       } else if (kind === 'shipments')
         data = await rows(
           db,
-          sql`SELECT s.*,o.external_order_id,o.status AS order_status,(SELECT count(*)::int FROM shipment_items si WHERE si.shipment_id=s.id AND si.removed_at IS NULL) AS items_count,(SELECT sum(oi.unit_price_kopecks) FROM shipment_items si JOIN sale_cycles sc ON sc.id=si.sale_cycle_id JOIN order_items oi ON oi.id=sc.order_item_id WHERE si.shipment_id=s.id AND si.removed_at IS NULL) AS sale_total_kopecks FROM shipments s JOIN orders o ON o.id=s.order_id JOIN sales_channels c ON c.id=o.channel_id WHERE c.provider='AVITO_SIMULATION' ORDER BY s.created_at DESC,s.id LIMIT 50 OFFSET ${offset}`,
+          sql`SELECT s.*,o.external_order_id,o.status AS order_status,(SELECT count(*)::int FROM shipment_items si WHERE si.shipment_id=s.id AND si.removed_at IS NULL) AS items_count,(SELECT sum(oi.unit_price_kopecks) FROM shipment_items si JOIN sale_cycles sc ON sc.id=si.sale_cycle_id JOIN order_items oi ON oi.id=sc.order_item_id WHERE si.shipment_id=s.id AND si.removed_at IS NULL) AS sale_total_kopecks FROM shipments s JOIN orders o ON o.id=s.order_id JOIN sales_channels c ON c.id=o.channel_id WHERE c.provider='AVITO' ORDER BY s.created_at DESC,s.id LIMIT 50 OFFSET ${offset}`,
         );
       else if (kind === 'documents')
         data = await rows(
           db,
-          sql`SELECT d.*,(SELECT status FROM marking_signing_tasks WHERE document_id=d.id) AS signing_status,coalesce((SELECT jsonb_agg(jsonb_build_object('id',di.id,'status',di.status,'errorCode',di.error_code,'unitId',m.unit_id,'maskedCode',m.masked_code,'action',co.action,'reason',co.reason,'dueAt',co.submission_due_at)) FROM chz_document_items di JOIN chz_operations co ON co.id=di.chz_operation_id JOIN unit_markings m ON m.id=co.marking_id WHERE di.document_id=d.id),'[]'::jsonb) AS items FROM chz_documents d ORDER BY d.created_at DESC,d.id LIMIT 50 OFFSET ${offset}`,
+          sql`SELECT d.*,(SELECT status FROM signer_jobs WHERE document_id=d.id) AS signing_status,coalesce((SELECT jsonb_agg(jsonb_build_object('id',di.id,'status',di.status,'errorCode',di.error_code,'unitId',m.unit_id,'maskedCode',m.masked_code,'action',co.action,'reason',co.reason,'dueAt',co.submission_due_at)) FROM chz_document_items di JOIN chz_operations co ON co.id=di.chz_operation_id JOIN unit_markings m ON m.id=co.marking_id WHERE di.document_id=d.id),'[]'::jsonb) AS items FROM chz_documents d WHERE d.schema_version='lp-true-api-747' ORDER BY d.created_at DESC,d.id LIMIT 50 OFFSET ${offset}`,
         );
       else if (kind === 'issues')
         data = await rows(
@@ -1189,272 +1229,24 @@ export function createMarkingPipelineStore(
           db,
           sql`SELECT (SELECT count(*)::int FROM shipments WHERE status='PACKED') AS packed,(SELECT count(*)::int FROM shipments WHERE status='READY') AS ready,(SELECT count(*)::int FROM marking_issues WHERE resolved_at IS NULL) AS issues,(SELECT count(*)::int FROM chz_operations WHERE status IN ${active}) AS pending,(SELECT count(*)::int FROM marking_business_days) AS calendar_days`,
         );
-      // Saved simulation evidence remains simulated even when execution is later disabled.
-      return {
-        mode,
-        simulated: kind === 'unit' ? (data as Row).simulated === true : true,
-        data,
-      };
+      return { data };
     },
-    async run(operationId, mode) {
-      requirePipeline(mode === 'simulation', 'LEGAL_PROVIDER_DISABLED');
+    async reconcile() {
       await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(19378041)`);
-        const job = await first(
-            tx,
-            sql`SELECT * FROM integration_operations WHERE id=${operationId}`,
-          ),
-          type = s(job, 'operation_type'),
-          id = s(job, 'aggregate_id');
-        const op = await header(
+        for (const candidate of await rows(
           tx,
-          null,
-          'MARKING',
-          'pipeline:worker:' + operationId + ':' + randomUUID(),
-        );
-        if (type === 'pipeline.check') {
-          await checkUnit(tx, id, op);
-          return;
-        }
-        if (type === 'pipeline.markings') {
-          const sh = await shipment(tx, id, true);
-          if (sh.status === 'CANCELLED') return;
-          const items = await composition(tx, id);
-          requirePipeline(
-            items.every((i) => i.packed_at),
-            'SHIPMENT_NOT_PACKED',
-          );
-          for (const item of items)
-            await tx.execute(
-              sql`UPDATE order_unit_assignments SET avito_marking_status='ACCEPTED',provider_confirmed_at=now(),last_operation_id=${op} WHERE id=${s(item, 'assignment_id')}`,
-            );
-          await tx.execute(
-            sql`UPDATE shipments SET status='PACKED',last_operation_id=${op} WHERE id=${id}`,
-          );
-          await tx.execute(
-            sql`UPDATE orders SET status='PACKED',last_operation_id=${op} WHERE id=${s(sh, 'order_id')}`,
-          );
-          return;
-        }
-        if (type === 'pipeline.sign') {
-          const task = await first(
+          sql`SELECT u.id FROM product_units u JOIN marking_supply_evidence e ON e.unit_id=u.id LEFT JOIN LATERAL (SELECT observed_at FROM unit_marking_events me JOIN unit_markings m ON m.id=me.marking_id WHERE m.unit_id=u.id AND m.retired_at IS NULL AND me.source='TRUE_API' ORDER BY me.observed_at DESC,me.id DESC LIMIT 1) last_check ON true WHERE u.current_state IN ('AVAILABLE','PACKING') AND e.provider_document_id IS NOT NULL AND (e.verified_at IS NULL OR last_check.observed_at IS NULL OR last_check.observed_at<now()-interval '10 minutes') AND NOT EXISTS(SELECT 1 FROM integration_operations io WHERE io.operation_type='pipeline.check' AND io.aggregate_id=u.id::text AND io.status IN ('PENDING','RUNNING','RETRY_SCHEDULED')) ORDER BY u.id LIMIT 20`,
+        ))
+          await enqueue(
             tx,
-            sql`SELECT t.*,a.payload_hash,a.payload_ciphertext,a.encryption_key_id,a.identity_hash FROM marking_signing_tasks t JOIN marking_document_artifacts a ON a.document_id=t.document_id WHERE t.document_id=${id} FOR UPDATE OF t`,
+            'pipeline.check',
+            s(candidate, 'id'),
+            'refresh:' +
+              s(candidate, 'id') +
+              ':' +
+              Math.floor(Date.now() / 300000),
           );
-          requirePipeline(
-            task.simulated === true,
-            'SIGNATURE_VERIFICATION_UNAVAILABLE',
-          );
-          requirePipeline(protection, 'MARKING_STORAGE_NOT_CONFIGURED');
-          if (task.status === 'VERIFIED') return;
-          requirePipeline(
-            task.status === 'PENDING' ||
-              (task.status === 'LEASED' &&
-                Date.parse(s(task, 'lease_expires_at')) < Date.now()),
-            'SIGNER_LEASE_ACTIVE',
-          );
-          const raw = protection.decrypt(
-            s(task, 'payload_ciphertext'),
-            s(task, 'encryption_key_id'),
-            s(task, 'identity_hash'),
-          );
-          const payloadHash = createHash('sha256').update(raw).digest('hex');
-          requirePipeline(
-            payloadHash === task.payload_hash,
-            'SIGNATURE_PAYLOAD_MISMATCH',
-          );
-          const mockSignature = JSON.stringify({
-            type: 'SIMULATION_ONLY_NOT_UKEP',
-            payloadHash,
-            sellerInn: task.seller_inn,
-          });
-          const encrypted = protection.encrypt(
-            mockSignature,
-            'signature:' + s(task, 'id'),
-          );
-          await tx.execute(
-            sql`UPDATE marking_signing_tasks SET status='VERIFIED',signature_ciphertext=${encrypted.payloadCiphertext},signature_key_id=${encrypted.encryptionKeyId},signature_identity_hash=${encrypted.identityHash},signature_hash=${createHash('sha256').update(mockSignature).digest('hex')},verified_payload_hash=${payloadHash},verification_source='SIMULATION',received_at=now(),verified_at=now() WHERE id=${s(task, 'id')}`,
-          );
-          await enqueue(tx, 'pipeline.document', id, 'pipeline.signed:' + id);
-          return;
-        }
-        requirePipeline(type === 'pipeline.document', 'INVALID_OPERATION');
-        const document = await first(
-          tx,
-          sql`SELECT * FROM chz_documents WHERE id=${id} FOR UPDATE`,
-        );
-        if (document.status === 'CONFIRMED') return;
-        const items = await rows(
-          tx,
-          sql`SELECT di.id AS item_id,di.status AS item_status,co.*,m.unit_id FROM chz_document_items di JOIN chz_operations co ON co.id=di.chz_operation_id JOIN unit_markings m ON m.id=co.marking_id WHERE di.document_id=${id} ORDER BY m.unit_id`,
-        );
-        const signature = await first(
-          tx,
-          sql`SELECT t.status,t.simulated,t.verified_payload_hash,t.verification_source,a.payload_hash FROM marking_signing_tasks t JOIN marking_document_artifacts a ON a.document_id=t.document_id WHERE t.document_id=${id}`,
-        );
-        if (signature.status !== 'VERIFIED') {
-          if (document.status !== 'WAITING_SIGNATURE') {
-            await tx.execute(
-              sql`UPDATE chz_documents SET status='WAITING_SIGNATURE',last_operation_id=${op} WHERE id=${id}`,
-            );
-            for (const item of items) {
-              await tx.execute(
-                sql`UPDATE chz_operations SET status='WAITING_SIGNATURE',last_operation_id=${op} WHERE id=${s(item, 'id')}`,
-              );
-              await tx.execute(
-                sql`UPDATE chz_document_items SET status='WAITING_SIGNATURE',last_operation_id=${op} WHERE id=${s(item, 'item_id')}`,
-              );
-            }
-          }
-          if (signature.status === 'PENDING')
-            await enqueue(tx, 'pipeline.sign', id, 'pipeline.sign:' + id);
-          return;
-        }
-        requirePipeline(
-          signature.simulated === true &&
-            signature.verification_source === 'SIMULATION' &&
-            signature.verified_payload_hash === signature.payload_hash,
-          'SIGNATURE_PAYLOAD_MISMATCH',
-        );
-        let external = (
-          await rows(
-            tx,
-            sql`SELECT * FROM marking_simulation_documents WHERE document_id=${id}`,
-          )
-        )[0];
-        if (!external) {
-          const outcomes: Record<string, string> = {};
-          for (const item of items) {
-            const fact = (
-              await rows(
-                tx,
-                sql`SELECT * FROM marking_simulation_units WHERE unit_id=${s(item, 'unit_id')}`,
-              )
-            )[0];
-            outcomes[s(item, 'unit_id')] = fact
-              ? s(fact, 'outcome')
-              : 'REJECTED';
-          }
-          external = await first(
-            tx,
-            sql`INSERT INTO marking_simulation_documents(document_id,payload_hash,items) VALUES(${id},${s(document, 'payload_hash')},${JSON.stringify(outcomes)}::jsonb) RETURNING *`,
-          );
-          await tx.execute(
-            sql`UPDATE chz_documents SET status='PROCESSING',external_document_id=${s(external, 'external_id')},submitted_at=now(),last_operation_id=${op} WHERE id=${id}`,
-          );
-          for (const item of items) {
-            await tx.execute(
-              sql`UPDATE chz_operations SET status='PROCESSING',last_operation_id=${op} WHERE id=${s(item, 'id')}`,
-            );
-            await tx.execute(
-              sql`UPDATE chz_document_items SET status='PROCESSING',last_operation_id=${op} WHERE id=${s(item, 'item_id')}`,
-            );
-          }
-          await enqueue(tx, 'pipeline.document', id, 'pipeline.poll:' + id);
-          return;
-        }
-        // Poll/readback is durable and separate from submission. Already accepted items are skipped.
-        const outcomes = external.items as Record<string, string>;
-        let allConfirmed = true;
-        for (const item of items) {
-          if (item.item_status === 'CONFIRMED') continue;
-          const outcome = outcomes[s(item, 'unit_id')];
-          const fact = await first(
-            tx,
-            sql`SELECT f.*,st.seller_inn FROM marking_simulation_units f JOIN marking_pipeline_settings st ON st.warehouse_id=${s(document, 'warehouse_id')}::uuid WHERE f.unit_id=${s(item, 'unit_id')}`,
-          );
-          if (outcome === 'AMBIGUOUS' && item.status !== 'UNKNOWN_RESULT') {
-            await tx.execute(
-              sql`UPDATE chz_operations SET status='UNKNOWN_RESULT',last_operation_id=${op} WHERE id=${s(item, 'id')}`,
-            );
-            await tx.execute(
-              sql`UPDATE chz_document_items SET status='UNKNOWN_RESULT',last_operation_id=${op} WHERE id=${s(item, 'item_id')}`,
-            );
-            await enqueue(
-              tx,
-              'pipeline.document',
-              id,
-              'pipeline.reconcile:' + id,
-            );
-            allConfirmed = false;
-            continue;
-          }
-          const state = ['RETURN', 'CORRECT'].includes(s(item, 'action'))
-            ? 'INTRODUCED'
-            : 'RETIRED';
-          if (
-            outcome === 'REJECTED' ||
-            outcome === 'STATE_MISMATCH' ||
-            fact.owner_inn !== fact.seller_inn
-          ) {
-            const status =
-              outcome === 'REJECTED' ? 'REJECTED' : 'MANUAL_ATTENTION';
-            await tx.execute(
-              sql`UPDATE chz_operations SET status=${status}::chz_progress,last_operation_id=${op} WHERE id=${s(item, 'id')}`,
-            );
-            await tx.execute(
-              sql`UPDATE chz_document_items SET status=${status}::chz_progress,error_code=${'SIMULATED_' + outcome},last_operation_id=${op} WHERE id=${s(item, 'item_id')}`,
-            );
-            await issue(tx, 'DOCUMENT_' + outcome, s(item, 'unit_id'), {
-              documentId: id,
-            });
-            allConfirmed = false;
-            continue;
-          }
-          await tx.execute(
-            sql`UPDATE marking_simulation_units SET provider_state=${state},updated_at=now() WHERE unit_id=${s(item, 'unit_id')}`,
-          );
-          await tx.execute(
-            sql`INSERT INTO unit_marking_events(marking_id,state,provider_state,source,source_event_id,ownership_verified,chz_document_item_id,operation_id,observed_at) VALUES(${s(item, 'marking_id')},${['RETURN', 'CORRECT'].includes(s(item, 'action')) ? 'IN_CIRCULATION' : 'WITHDRAWN'}::chz_legal_state,${state},'SIMULATION',${id + ':' + s(item, 'item_id')},'VERIFIED',${s(item, 'item_id')},${op},now()) ON CONFLICT(source,source_event_id) DO NOTHING`,
-          );
-          await tx.execute(
-            sql`UPDATE chz_operations SET status='CONFIRMED',confirmed_at=now(),last_operation_id=${op} WHERE id=${s(item, 'id')}`,
-          );
-          await tx.execute(
-            sql`UPDATE chz_document_items SET status='CONFIRMED',error_code=NULL,last_operation_id=${op} WHERE id=${s(item, 'item_id')}`,
-          );
-          await resolve(tx, s(item, 'unit_id'), [
-            'DOCUMENT_REJECTED',
-            'DOCUMENT_STATE_MISMATCH',
-          ]);
-          if (['RETURN', 'CORRECT'].includes(s(item, 'action')))
-            await releaseReturn(
-              tx,
-              s(item, 'unit_id'),
-              s(item, 'sale_cycle_id'),
-              s(item, 'return_id') || null,
-              s(document, 'warehouse_id'),
-            );
-        }
-        await tx.execute(
-          sql`UPDATE chz_documents SET status=${allConfirmed ? 'CONFIRMED' : 'MANUAL_ATTENTION'}::chz_progress,processed_at=now(),last_operation_id=${op} WHERE id=${id}`,
-        );
-        if (allConfirmed && document.action === 'WITHDRAW') {
-          const shipmentId = s(items[0]!, 'shipment_id'),
-            sh = await shipment(tx, shipmentId, true);
-          if (
-            sh.status === 'PACKED' &&
-            !(
-              await rows(
-                tx,
-                sql`SELECT id FROM chz_operations WHERE shipment_id=${shipmentId} AND action='WITHDRAW' AND status<>'CONFIRMED'`,
-              )
-            ).length
-          ) {
-            await tx.execute(
-              sql`UPDATE shipments SET status='READY',last_operation_id=${op} WHERE id=${shipmentId}`,
-            );
-            await tx.execute(
-              sql`UPDATE orders SET status='READY_TO_SHIP',last_operation_id=${op} WHERE id=${s(sh, 'order_id')}`,
-            );
-          }
-        }
-      });
-    },
-    async reconcile(mode) {
-      if (mode !== 'simulation') return;
-      await db.transaction(async (tx) => {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(19378041)`);
         for (const co of await rows(
           tx,
           sql`SELECT co.id,co.submission_due_at,co.shipment_id,co.status FROM chz_operations co WHERE co.submission_due_at<now() AND (co.status<>'CONFIRMED' OR co.confirmed_at>co.submission_due_at)`,
@@ -1471,6 +1263,9 @@ export function createMarkingPipelineStore(
             operationType: job.operation_type,
             errorCode: job.last_error_code,
           });
+        await tx.execute(
+          sql`UPDATE marking_issues mi SET resolved_at=now() WHERE mi.code='PREPARED_NOT_HANDED_OVER' AND mi.resolved_at IS NULL AND EXISTS(SELECT 1 FROM shipments s WHERE s.id=mi.entity_id AND (s.handed_over_at IS NOT NULL OR s.status='CANCELLED'))`,
+        );
         for (const sh of await rows(
           tx,
           sql`SELECT id FROM shipments WHERE prepared_at<now()-interval '30 minutes' AND handed_over_at IS NULL AND status<>'CANCELLED'`,

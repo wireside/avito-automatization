@@ -1,3 +1,11 @@
+import { createSignerEnrollmentStore } from '@avito/database';
+import { createSignerEnrollment } from '@avito/domain';
+import {
+  inspectSignerCertificate,
+  buildSignerInstaller,
+} from '../infrastructure/signer-installation.js';
+import { prepareAvitoImport } from '@avito/database';
+import { requirePipeline } from '@avito/domain';
 import { createLocalSigningStore } from '@avito/database';
 import { createLocalSignerService } from '@avito/domain';
 import { createMarkingPipelineStore } from '@avito/database';
@@ -30,11 +38,47 @@ export async function createApiRuntime(config: AppConfig) {
   const redis = createRedisConnection(config.REDIS_URL);
   const users = createUserAccessStore(database);
   const inventory = createInventoryStore(database.db);
+  const orderReader = createAvitoOrderReader({
+    clientId: config.AVITO_API_CLIENT_ID,
+    clientSecret: config.AVITO_API_CLIENT_SECRET,
+    acquireReadSlot: createAvitoReadLimiter(
+      redis,
+      config.AVITO_API_CLIENT_ID ?? 'unconfigured',
+    ),
+  });
+
+  const registry = createSignerEnrollmentStore(database.db);
+  const enrollment =
+    config.SIGNER_TELEGRAM_ENROLLMENT_ENABLED && config.PUBLIC_API_URL
+      ? createSignerEnrollment({
+          store: registry,
+          publicUrl: config.PUBLIC_API_URL,
+          inspectCertificate: inspectSignerCertificate,
+        })
+      : undefined;
+  const protection = config.MARKING_ENCRYPTION_KEY
+    ? {
+        encrypt: createMarkingProtector(
+          config.MARKING_ENCRYPTION_KEY,
+          config.MARKING_ENCRYPTION_KEY_ID,
+        ),
+        decrypt: createMarkingUnprotector(
+          config.MARKING_ENCRYPTION_KEY,
+          config.MARKING_ENCRYPTION_KEY_ID,
+        ),
+      }
+    : undefined;
   const bot =
     config.TELEGRAM_MODE !== 'disabled' &&
     config.TELEGRAM_BOT_TOKEN &&
     config.MINI_APP_URL
-      ? createTelegramBot(config.TELEGRAM_BOT_TOKEN, config.MINI_APP_URL)
+      ? createTelegramBot(
+          config.TELEGRAM_BOT_TOKEN,
+          config.MINI_APP_URL,
+          enrollment
+            ? { enrollment, findUser: users.findActiveUser }
+            : undefined,
+        )
       : undefined;
   const deliverTelegramUpdate =
     config.TELEGRAM_MODE === 'webhook' && bot
@@ -48,7 +92,29 @@ export async function createApiRuntime(config: AppConfig) {
         })
       : undefined;
   const app = await buildApp(config, {
-    ...(config.LOCAL_SIGNER_TOKEN
+    ...(enrollment
+      ? {
+          signerEnrollment: enrollment,
+          signerInstaller: buildSignerInstaller,
+          authenticateSigner: async (token: string) => {
+            const binding = await enrollment.authorize(token);
+            return binding
+              ? {
+                  binding,
+                  service: createLocalSignerService(
+                    createLocalSigningStore(
+                      database.db,
+                      protection,
+                      binding.certificateThumbprint,
+                      binding.sellerInn,
+                    ),
+                  ),
+                }
+              : null;
+          },
+        }
+      : {}),
+    ...(!config.SIGNER_TELEGRAM_ENROLLMENT_ENABLED && config.LOCAL_SIGNER_TOKEN
       ? { localSignerToken: config.LOCAL_SIGNER_TOKEN }
       : {}),
     localSigner: createLocalSignerService(
@@ -66,6 +132,7 @@ export async function createApiRuntime(config: AppConfig) {
               ),
             }
           : undefined,
+        config.LOCAL_SIGNER_CERTIFICATE_THUMBPRINT,
       ),
     ),
 
@@ -84,8 +151,32 @@ export async function createApiRuntime(config: AppConfig) {
               ),
             }
           : undefined,
+        {
+          avitoConfigured: !!(
+            config.AVITO_API_CLIENT_ID && config.AVITO_API_CLIENT_SECRET
+          ),
+          signerConfigured:
+            !config.SIGNER_TELEGRAM_ENROLLMENT_ENABLED &&
+            !!(
+              config.LOCAL_SIGNER_TOKEN &&
+              config.LOCAL_SIGNER_CERTIFICATE_THUMBPRINT
+            ),
+          documentsEnabled: config.CHZ_DOCUMENT_SUBMISSION_ENABLED,
+          avitoWritesEnabled: config.AVITO_WRITES_ENABLED,
+        },
       ),
-      config.MARKING_PIPELINE_MODE,
+      {
+        importOrder: async (input) => {
+          const result = await orderReader.get(String(input.externalOrderId));
+          requirePipeline(result.ok, result.ok ? '' : result.code);
+          return prepareAvitoImport(
+            database.db,
+            result.order,
+            input,
+            config.AVITO_API_CLIENT_ID ?? '',
+          );
+        },
+      },
     ),
     readOrders: createReadOrders(
       createAvitoOrderReader({
@@ -138,7 +229,7 @@ export async function createApiRuntime(config: AppConfig) {
         if ((await bot.telegram.getWebhookInfo()).url)
           throw new Error('Remove webhook before using polling');
         void bot
-          .launch({ allowedUpdates: ['message'] }, () => {
+          .launch({ allowedUpdates: ['message', 'callback_query'] }, () => {
             pollingStarted = true;
             app.log.info('Telegram polling started');
           })

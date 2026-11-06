@@ -10,7 +10,6 @@ async function setup(
   page: Page,
   options: {
     role?: string;
-    mode?: string;
     lost?: boolean;
     status?: string;
     docStatus?: string;
@@ -121,7 +120,6 @@ async function setup(
       return r.fulfill({
         json: {
           ok: true,
-          simulated: true,
           replayed:
             requests.filter((x) => x.body.requestId === body.requestId).length >
             1,
@@ -130,6 +128,18 @@ async function setup(
       });
     }
     let data: unknown = [];
+    if (path === 'integrations')
+      data = {
+        avitoConfigured: true,
+        signerConfigured: true,
+        documentsEnabled: false,
+        avitoWritesEnabled: false,
+        seller_configured: true,
+        chz_authorized: false,
+        signer_online: false,
+        signer_last_seen_at: null,
+        certificate_expires_at: null,
+      };
     if (path === 'overview')
       data = { packed: 0, ready: 0, issues: 0, pending: 0, calendar_days: 30 };
     if (path === 'shipments')
@@ -163,7 +173,7 @@ async function setup(
         payloadBase64: 'VEVTVA==',
       };
     return r.fulfill({
-      json: { mode: options.mode ?? 'simulation', simulated: true, data },
+      json: { data },
     });
   });
   await page.goto('/');
@@ -229,10 +239,10 @@ for (const width of [390, 1440])
       fullPage: true,
     });
   });
-test('disabled mode and viewer never get write actions', async ({ page }) => {
-  await setup(page, { role: 'VIEWER', mode: 'disabled', status: 'READY' });
+test('viewer never gets write actions', async ({ page }) => {
+  await setup(page, { role: 'VIEWER', status: 'READY' });
   await expect(
-    page.getByText('Тестовый процесс выключен', { exact: true }),
+    page.getByText('Подписант: не в сети', { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Передал перевозчику', exact: true }),
@@ -255,13 +265,11 @@ test('document partial results, received signature and explicit export', async (
     .getByRole('button', { name: 'Открыть документ', exact: true })
     .click();
   await page
-    .getByRole('button', { name: 'Скачать тестовый пакет', exact: true })
+    .getByRole('button', { name: 'Скачать документ', exact: true })
     .click();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Скачать JSON', exact: true }).click();
-  expect((await download).suggestedFilename()).toBe(
-    `TEST-document-${docId}.json`,
-  );
+  expect((await download).suggestedFilename()).toBe(`document-${docId}.json`);
 });
 test('return requests payment evidence only for paid returns', async ({
   page,
@@ -309,7 +317,7 @@ test('settings submit contract fields and viewer has no export', async ({
     .getByText('Настройки', { exact: true })
     .click();
   await expect(
-    page.getByText('Состояние подключения неизвестно', { exact: true }),
+    page.getByText('Состояние подключения показано выше', { exact: true }),
   ).toBeVisible();
   await page
     .getByRole('button', { name: 'Добавить реквизиты склада', exact: true })
@@ -397,8 +405,6 @@ test('legal details are loaded only after expanding a unit', async ({
     calls++;
     return r.fulfill({
       json: {
-        mode: 'simulation',
-        simulated: true,
         data: {
           id: uid,
           current_state: 'AVAILABLE',
@@ -408,7 +414,6 @@ test('legal details are loaded only after expanding a unit', async ({
           observed_at: null,
           received_legally: false,
           pending: false,
-          simulated: true,
           blockers: ['SUPPLY_NOT_CONFIRMED'],
         },
       },
@@ -447,7 +452,7 @@ test('viewer sees document results without export or correction controls', async
     page.getByText('Подпись: Подпись получена, но не проверена'),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Скачать тестовый пакет', exact: true }),
+    page.getByRole('button', { name: 'Скачать документ', exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole('button', {
@@ -455,4 +460,31 @@ test('viewer sees document results without export or correction controls', async
       exact: true,
     }),
   ).toHaveCount(0);
+});
+
+test('owner requests a Windows installer without entering any agent credentials', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route('**/api/v1/local-signer/install-link', (r) =>
+    r.fulfill({
+      json: {
+        url: 'https://api.example.com/signer/install#' + 'a'.repeat(43),
+        expiresAt: '2027-01-01T00:00:00.000Z',
+      },
+    }),
+  );
+  await page
+    .getByRole('navigation', { name: 'Основная навигация' })
+    .getByText('Настройки', { exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Подключить Windows', exact: true })
+    .click();
+  await expect(
+    page.getByRole('textbox', { name: 'Ссылка для Windows · 30 минут' }),
+  ).toHaveValue('https://api.example.com/signer/install#' + 'a'.repeat(43));
+  await expect(
+    page.getByRole('link', { name: 'Открыть установку' }),
+  ).toHaveAttribute('rel', 'noopener noreferrer');
 });
