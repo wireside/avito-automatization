@@ -1,3 +1,8 @@
+import { assertCurrentShipment } from '@avito/domain';
+import { readAvitoShipmentReference } from '@avito/database';
+import { createAvitoOrderActions } from '@avito/domain';
+import { createAvitoActionStore } from '@avito/database';
+import { createAvitoActionProvider } from '../infrastructure/avito-actions.js';
 import { createSignerEnrollmentStore } from '@avito/database';
 import { createSignerEnrollment } from '@avito/domain';
 import {
@@ -39,6 +44,7 @@ export async function createApiRuntime(config: AppConfig) {
   const users = createUserAccessStore(database);
   const inventory = createInventoryStore(database.db);
   const orderReader = createAvitoOrderReader({
+    includePhotos: false,
     clientId: config.AVITO_API_CLIENT_ID,
     clientSecret: config.AVITO_API_CLIENT_SECRET,
     acquireReadSlot: createAvitoReadLimiter(
@@ -166,6 +172,20 @@ export async function createApiRuntime(config: AppConfig) {
         },
       ),
       {
+        validateShipment: async (action, input) => {
+          const ref = await readAvitoShipmentReference(
+            database.db,
+            String(input.shipmentId),
+            config.AVITO_API_CLIENT_ID ?? '',
+          );
+          const current = await orderReader.get(ref.externalOrderId);
+          requirePipeline(current.ok, current.ok ? '' : current.code);
+          assertCurrentShipment(
+            current.order,
+            ref,
+            action === 'pack' ? 'pack' : 'dispatch',
+          );
+        },
         importOrder: async (input) => {
           const result = await orderReader.get(String(input.externalOrderId));
           requirePipeline(result.ok, result.ok ? '' : result.code);
@@ -178,6 +198,24 @@ export async function createApiRuntime(config: AppConfig) {
         },
       },
     ),
+    avitoOrderActions: createAvitoOrderActions({
+      store: createAvitoActionStore(
+        database.db,
+        protection,
+        config.AVITO_API_CLIENT_ID ?? '',
+      ),
+      reader: orderReader,
+      writesEnabled: config.AVITO_WRITES_ENABLED,
+      provider: createAvitoActionProvider({
+        clientId: config.AVITO_API_CLIENT_ID,
+        clientSecret: config.AVITO_API_CLIENT_SECRET,
+        writesEnabled: config.AVITO_WRITES_ENABLED,
+        acquireSlot: createAvitoReadLimiter(
+          redis,
+          config.AVITO_API_CLIENT_ID ?? 'unconfigured',
+        ),
+      }),
+    }),
     readOrders: createReadOrders(
       createAvitoOrderReader({
         clientId: config.AVITO_API_CLIENT_ID,

@@ -66,3 +66,72 @@ it('treats missing item confirmation as failure even for HTTP 200', async () => 
     })(work),
   ).rejects.toThrow('AVITO_MARKINGS_NOT_CONFIRMED');
 });
+
+it('refreshes the token once for 401 and requires one confirmation for each item', async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: 'old', expires_in: 3600 })),
+    )
+    .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: 'new', expires_in: 3600 })),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          results: [
+            { orderId: work.externalOrderId, itemId: '123', success: true },
+          ],
+        }),
+      ),
+    );
+  await createAvitoMarkingSender({
+    clientId: 'id',
+    clientSecret: 'secret',
+    writesEnabled: true,
+    fetch: fetcher,
+  })(work);
+  expect(fetcher).toHaveBeenCalledTimes(4);
+  expect(fetcher.mock.calls.every((c) => c[1]!.redirect === 'error')).toBe(
+    true,
+  );
+});
+it('rejects duplicate confirmations instead of accepting a partial batch', async () => {
+  const row = { orderId: work.externalOrderId, itemId: '123', success: true };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ access_token: 'token', expires_in: 3600 })),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ results: [row, row] })),
+    );
+  await expect(
+    createAvitoMarkingSender({
+      clientId: 'id',
+      clientSecret: 'secret',
+      writesEnabled: true,
+      fetch: fetcher,
+    })(work),
+  ).rejects.toThrow('AVITO_MARKINGS_NOT_CONFIRMED');
+});
+it('checks a fresh provider order before acquiring token or sending codes', async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  const readOrder = vi.fn().mockResolvedValue({
+    id: work.externalOrderId,
+    status: 'canceled',
+    availableActions: [],
+    items: [],
+  });
+  await expect(
+    createAvitoMarkingSender({
+      clientId: 'id',
+      clientSecret: 'secret',
+      writesEnabled: true,
+      fetch: fetcher,
+      readOrder,
+    })(work),
+  ).rejects.toThrow('ORDER_COMPOSITION_CHANGED');
+  expect(fetcher).not.toHaveBeenCalled();
+});

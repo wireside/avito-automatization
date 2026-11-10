@@ -73,6 +73,8 @@ async function setup(page: Page, imageUrl: string | null = null) {
       return route.fulfill({ status: 500 });
     }
     const u = new URL(route.request().url());
+    if (u.pathname.endsWith('/actions'))
+      return route.fulfill({ json: { writesEnabled: true, operations: [] } });
     if (/\/orders\//.test(u.pathname))
       return route.fulfill({
         json: {
@@ -148,7 +150,7 @@ for (const width of [430, 1512]) {
       'TRACK-TEST-123',
     );
     await expect(
-      page.getByRole('button', { name: 'Взять заказ в работу', exact: true }),
+      page.getByRole('button', { name: 'Собрать заказ', exact: true }),
     ).toBeVisible();
     await expect(
       page.getByText(/Сопоставление со складом и резерв доступны/),
@@ -406,7 +408,7 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
     .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
     .click();
   await page
-    .getByRole('button', { name: 'Взять заказ в работу', exact: true })
+    .getByRole('button', { name: 'Собрать заказ', exact: true })
     .click();
   await page
     .getByRole('combobox', {
@@ -416,14 +418,14 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
     .click();
   await page.getByRole('option').filter({ hasText: '48' }).click();
   await page
-    .getByRole('button', { name: 'Взять в работу', exact: true })
+    .getByRole('button', { name: 'Начать сборку', exact: true })
     .click();
   await expect.poll(() => commands.length).toBe(1);
   await expect(
-    page.getByRole('button', { name: 'Взять в работу', exact: true }),
+    page.getByRole('button', { name: 'Начать сборку', exact: true }),
   ).toBeEnabled();
   await page
-    .getByRole('button', { name: 'Взять в работу', exact: true })
+    .getByRole('button', { name: 'Начать сборку', exact: true })
     .click();
   await expect(
     page.getByRole('heading', { name: 'Очередь упаковки', exact: true }),
@@ -434,4 +436,278 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
     externalOrderId: firstId,
     mappings: [{ externalItemId: '123456789', variantId }],
   });
+});
+
+for (const width of [320, 390, 430, 1512]) {
+  test(`order toolbar has real spacing and mobile navigation uniform contrast at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 932 });
+    await setup(page);
+    await page
+      .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
+      .click();
+    const toolbar = page.getByTestId('order-toolbar');
+    await expect(toolbar.locator('button')).toHaveCount(2);
+    const buttons = await toolbar.locator('button').all();
+    const boxes = await Promise.all(buttons.map((b) => b.boundingBox()));
+    expect(boxes.length).toBe(2);
+    const [a, b] = boxes;
+    expect(
+      a && b && (b.x >= a.x + a.width + 8 || b.y >= a.y + a.height + 8),
+    ).toBeTruthy();
+    if (width < 960) {
+      const nav = page.locator('.mobile-navigation');
+      const colours = await nav.locator('.v-btn').evaluateAll((elements) =>
+        elements.map((el) => ({
+          color: getComputedStyle(el).color,
+          opacity: getComputedStyle(el).opacity,
+          icon: getComputedStyle(el.querySelector('.design-icon')!)
+            .backgroundColor,
+          mask: getComputedStyle(el.querySelector('.design-icon')!).maskImage,
+        })),
+      );
+      expect(new Set(colours.map((c) => c.color)).size).toBe(1);
+      expect(new Set(colours.map((c) => c.icon)).size).toBe(1);
+      expect(colours.every((c) => c.opacity === '1')).toBe(true);
+      expect(
+        await nav
+          .locator('.design-icon')
+          .evaluateAll((els) =>
+            els.every((el) => getComputedStyle(el).maskImage !== 'none'),
+          ),
+      ).toBe(true);
+      await expect(nav.locator('.v-btn--active')).toHaveCount(1);
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `/tmp/avito-review/order-detail-${width}.png`,
+      fullPage: true,
+    });
+  });
+}
+test('confirms a real order through our durable action API and reuses UUID after a lost response', async ({
+  page,
+}) => {
+  await setup(page);
+  const commands: unknown[] = [];
+  let queued = false;
+  await page.route('**/api/v1/orders/*/actions', async (route) => {
+    if (route.request().method() === 'POST') {
+      commands.push(route.request().postDataJSON());
+      if (commands.length === 1) return route.abort('failed');
+      queued = true;
+      return route.fulfill({
+        json: {
+          operationId: '00000000-0000-4000-8000-000000000123',
+          replayed: true,
+        },
+      });
+    }
+    return route.fulfill({
+      json: {
+        writesEnabled: true,
+        operations: queued
+          ? [
+              {
+                id: '00000000-0000-4000-8000-000000000123',
+                action: 'confirm',
+                status: 'PENDING',
+                errorCode: null,
+                createdAt: new Date().toISOString(),
+                labelReady: false,
+              },
+            ]
+          : [],
+      },
+    });
+  });
+  await page
+    .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
+    .click();
+  await page
+    .getByRole('button', {
+      name: 'Подтвердить заказ · обязательно',
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await dialog
+    .getByRole('button', { name: 'Подтвердить', exact: true })
+    .click();
+  await expect(dialog.getByText(/Нет ответа сервера/)).toBeVisible();
+  await dialog
+    .getByRole('button', { name: 'Повторить запрос', exact: true })
+    .click();
+  await expect(
+    page.getByText('Подтвердить заказ · В очереди', { exact: true }),
+  ).toBeVisible();
+  expect(commands).toHaveLength(2);
+  expect(commands[0]).toEqual(commands[1]);
+  expect(commands[0]).toEqual({
+    requestId: expect.any(String),
+    action: 'confirm',
+    data: {},
+  });
+});
+test('keeps provider writes disabled on screen when the backend flag is off', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route('**/api/v1/orders/*/actions', (route) =>
+    route.fulfill({ json: { writesEnabled: false, operations: [] } }),
+  );
+  await page
+    .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', {
+      name: 'Подтвердить заказ · обязательно',
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(
+      'Отправка действий в Авито выключена владельцем на сервере.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+});
+
+test('sends tracking, return routing, courier interval and label requests through the same order card', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route(`**/api/v1/orders/${firstId}`, (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        order: {
+          ...order(),
+          availableActions: [
+            { name: 'setTrackNumber', required: true },
+            { name: 'acceptReturnOrder', required: false },
+          ],
+        },
+        fetchedAt: new Date().toISOString(),
+        mode: 'read_only',
+      },
+    }),
+  );
+  const commands: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/orders/*/actions', (route) => {
+    if (route.request().method() === 'POST') {
+      commands.push(route.request().postDataJSON() as Record<string, unknown>);
+      return route.fulfill({
+        json: {
+          operationId: '00000000-0000-4000-8000-000000000123',
+          replayed: false,
+        },
+      });
+    }
+    return route.fulfill({ json: { writesEnabled: true, operations: [] } });
+  });
+  const interval = {
+    date: '2026-11-12T00:00:00Z',
+    timeIntervals: [
+      {
+        startDate: '2026-11-12T10:00:00Z',
+        endDate: '2026-11-12T12:00:00Z',
+        title: '10:00–12:00',
+        type: 'fixed',
+      },
+    ],
+  };
+  await page.route('**/api/v1/orders/*/courier-options', (route) =>
+    route.fulfill({
+      json: {
+        address: 'Адрес склада',
+        name: 'Иван Иванов',
+        phone: '+79999999999',
+        dateOptions: [interval],
+      },
+    }),
+  );
+  await page
+    .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
+    .click();
+  await page
+    .getByRole('button', {
+      name: 'Указать трек-номер · обязательно',
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await dialog
+    .getByRole('textbox', { name: 'Трек-номер', exact: true })
+    .fill('TRACK-NEW');
+  await dialog
+    .getByRole('button', { name: 'Подтвердить', exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  expect(commands[0]).toMatchObject({
+    action: 'setTrackNumber',
+    data: { trackingNumber: 'TRACK-NEW' },
+  });
+  await page
+    .getByRole('button', {
+      name: 'Выбрать отделение для возврата',
+      exact: true,
+    })
+    .click();
+  await dialog
+    .getByRole('textbox', { name: 'Индекс отделения Почты России' })
+    .fill('123456');
+  await dialog
+    .getByRole('textbox', { name: 'ФИО получателя' })
+    .fill('Иван Иванов');
+  await dialog
+    .getByRole('textbox', { name: 'Телефон с кодом страны' })
+    .fill('+79999999999');
+  await dialog
+    .getByRole('button', { name: 'Подтвердить', exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  expect(commands[1]).toMatchObject({
+    action: 'acceptReturnOrder',
+    data: {
+      terminalNumber: '123456',
+      name: 'Иван Иванов',
+      phone: '+79999999999',
+    },
+  });
+  await page
+    .getByRole('button', { name: 'Вызвать курьера', exact: true })
+    .click();
+  await dialog.getByRole('button', { name: 'Показать время курьера' }).click();
+  await expect(
+    dialog.getByRole('combobox', { name: 'Время приезда' }),
+  ).toBeEnabled();
+  await dialog.locator('.v-select .v-field').click();
+  await page.getByRole('option').first().click();
+  await dialog
+    .getByRole('button', { name: 'Подтвердить', exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  expect(commands[2]).toMatchObject({
+    action: 'setCourierDeliveryRange',
+    data: {
+      address: 'Адрес склада',
+      name: 'Иван Иванов',
+      phone: '+79999999999',
+      startDate: interval.timeIntervals[0]!.startDate,
+      endDate: interval.timeIntervals[0]!.endDate,
+      intervalType: 'fixed',
+    },
+  });
+  await page.getByRole('button', { name: 'Этикетка PDF', exact: true }).click();
+  await dialog
+    .getByRole('button', { name: 'Подтвердить', exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  expect(commands[3]).toMatchObject({ action: 'label', data: {} });
 });

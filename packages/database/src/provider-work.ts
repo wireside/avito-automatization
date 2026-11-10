@@ -136,6 +136,11 @@ export function createMarkingWorkStore(
       );
       return {
         kind: 'document',
+        shipmentId: (
+          await one(
+            sql`SELECT (SELECT co.shipment_id FROM chz_operations co JOIN chz_document_items di ON di.chz_operation_id=co.id WHERE di.document_id=${aggregate} AND co.action='WITHDRAW' LIMIT 1) AS shipment_id`,
+          )
+        ).shipment_id as string | null,
         documentId: aggregate,
         documentType: str(d, 'document_type'),
         status: str(d, 'status'),

@@ -63,6 +63,15 @@ jobs:
       # db:migrate builds database workspace dependencies before loading the schema.
       - run: pnpm db:migrate
       - run: pnpm verify
+      - name: Verify marking, signer and durable actions in an isolated database
+        env:
+          PGPASSWORD: avito
+          DATABASE_URL: postgresql://avito:avito@127.0.0.1:5432/avito_marking
+          RUN_MARKING_TESTS: 'true'
+        run: |
+          createdb -h 127.0.0.1 -U avito avito_marking
+          pnpm db:migrate
+          pnpm exec vitest run --no-file-parallelism packages/database/src/avito-actions.test.ts packages/database/src/marking-pipeline.test.ts packages/database/src/local-signing.test.ts packages/database/src/signer-enrollment.test.ts packages/database/src/marking-recovery.test.ts packages/database/src/operations.test.ts apps/backend/src/infrastructure/avito-order-lane.test.ts
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
 

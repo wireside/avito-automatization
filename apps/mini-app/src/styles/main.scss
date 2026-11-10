@@ -90,3 +90,17 @@ button:focus-visible {
 .mobile-navigation .v-btn--active > .v-btn__underlay {
   opacity: 0;
 }
+
+.design-icon-monochrome {
+  background-color: currentColor;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+.mobile-navigation .v-btn {
+  opacity: 1;
+  color: rgb(var(--v-theme-secondary)) !important;
+}
+.mobile-navigation .v-btn__content {
+  opacity: 1;
+}

@@ -48,6 +48,7 @@ describe('Windows installer', () => {
     expect(Object.keys(zip).sort()).toEqual(
       [
         'agent.ps1',
+        'policy.ps1',
         'connection.json',
         'install.ps1',
         'uninstall.ps1',

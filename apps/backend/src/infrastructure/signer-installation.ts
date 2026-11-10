@@ -36,6 +36,7 @@ export async function buildSignerInstaller(connection: {
   const names = [
     'install.ps1',
     'agent.ps1',
+    'policy.ps1',
     'uninstall.ps1',
     'Установить.cmd',
     'ПРОЧИТАЙТЕ.txt',

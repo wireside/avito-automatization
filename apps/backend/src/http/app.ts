@@ -1,3 +1,5 @@
+import { registerAvitoActionRoutes } from './routes/order-actions.js';
+import type { AvitoOrderActions } from '@avito/domain';
 import { registerSignerEnrollmentRoutes } from './routes/signer-enrollment.js';
 import type { SignerEnrollment, SignerBinding } from '@avito/domain';
 import { registerLocalSignerRoutes } from './routes/local-signer.js';
@@ -25,6 +27,7 @@ import {
 } from './routes/telegram-webhook.js';
 
 export interface HttpServices {
+  avitoOrderActions?: AvitoOrderActions;
   localSigner?: LocalSignerService;
   localSignerToken?: string;
   signerEnrollment?: SignerEnrollment;
@@ -76,6 +79,7 @@ export async function buildApp(
     services.authenticateSigner,
   );
   registerOrderRoutes(app, services);
+  registerAvitoActionRoutes(app, services);
   registerHealthRoutes(app, services.checkReadiness);
   registerAuthRoutes(app, services.verifyTelegramSession);
   registerTelegramWebhook(app, {

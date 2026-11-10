@@ -182,3 +182,30 @@ it('waits for authorization without recording a document submission attempt', as
   expect(f.legal.submit).not.toHaveBeenCalled();
   expect(f.store.defer).toHaveBeenCalledWith('job', 'CHZ_AUTH_REQUIRED', 30);
 });
+
+it('revalidates a delayed signed withdrawal before starting any legal submission', async () => {
+  const f = setup({ ...doc, shipmentId: 'shipment' }, true);
+  f.store.signature.mockResolvedValue({
+    signatureBase64: 'sig',
+    certificateBase64: 'cert',
+    payloadHash: 'hash',
+  });
+  const guard = vi
+    .fn()
+    .mockRejectedValue(new ProviderError('ORDER_NOT_AVAILABLE'));
+  await createMarkingExecutor({
+    store: f.store,
+    legal: f.legal,
+    sendMarkings: f.sendMarkings,
+    submissionsEnabled: true,
+    beforeDocumentSubmit: guard,
+  })('job');
+  expect(guard).toHaveBeenCalled();
+  expect(f.store.submissionStarted).not.toHaveBeenCalled();
+  expect(f.legal.submit).not.toHaveBeenCalled();
+  expect(f.store.defer).toHaveBeenCalledWith(
+    'job',
+    'ORDER_NOT_AVAILABLE',
+    undefined,
+  );
+});

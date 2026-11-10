@@ -1,5 +1,6 @@
 ﻿param([string]$BootstrapPath)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'policy.ps1')
 Add-Type -AssemblyName System.Windows.Forms
 function Fail([string]$Text){[Windows.Forms.MessageBox]::Show($Text,'Подключение подписи','OK','Warning')|Out-Null;exit 1}
 function Hash([string]$Text){$sha=[Security.Cryptography.SHA256]::Create();try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text)))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}}
@@ -25,11 +26,12 @@ try{
   try{
    $candidates=New-Object Security.Cryptography.X509Certificates.X509Certificate2Collection
    foreach($c in $store.Certificates){
-    if($c.HasPrivateKey -and $c.NotBefore -le (Get-Date) -and $c.NotAfter -gt (Get-Date) -and $c.PublicKey.Oid.Value -like '1.2.643.*' -and $c.Subject -match '(?:ИНН|INN|1.2.643.3.131.1.1)s*=s*"?d{12}(?:"|,|$)'){$null=$candidates.Add($c)}
+    try{$candidateInn=Get-SignerInn $c.Subject}catch{continue}
+    if($c.HasPrivateKey -and $c.NotBefore -le (Get-Date) -and $c.NotAfter -gt (Get-Date) -and $c.PublicKey.Oid.Value -in @('1.2.643.7.1.1.1.1','1.2.643.7.1.1.1.2')){$null=$candidates.Add($c)}
    }
    if($candidates.Count -eq 0){Fail 'Подключите токен владельца ИП и установите его действующий сертификат в «Личное — текущий пользователь». Подходящая УКЭП ИП не найдена.'}
    if($candidates.Count -eq 1){$cert=$candidates[0]}else{$chosen=[Security.Cryptography.X509Certificates.X509Certificate2UI]::SelectFromCollection($candidates,'Подпись владельца ИП','Выберите УКЭП нашего ИП на подключённом токене.',0);if($chosen.Count -ne 1){exit 1};$cert=$chosen[0]}
-   $inn=[Regex]::Match($cert.Subject,'(?:ИНН|INN|1.2.643.3.131.1.1)s*=s*"?(d{12})(?:"|,|$)').Groups[1].Value
+   $inn=Get-SignerInn $cert.Subject
    $token=RandomHex
    $pairingCode=([Convert]::ToUInt32((RandomHex).Substring(0,8),16)%1000000).ToString('D6')
    $signerId=($env:COMPUTERNAME -replace '[^A-Za-z0-9_-]','_');if($signerId.Length -gt 32){$signerId=$signerId.Substring(0,32)};$signerId+='_'+[Guid]::NewGuid().ToString('N').Substring(0,12)
@@ -46,17 +48,17 @@ try{
  Write-Host 'Если сообщение ещё не появилось, отправьте боту /signer. Оставьте это окно открытым.'
  $headers=@{Authorization=('Bearer '+$token)};$deadline=(Get-Date).AddMinutes(20);$active=$false
  while((Get-Date) -lt $deadline){
-  $status=Invoke-RestMethod -Method Post -Uri ($base.AbsoluteUri.TrimEnd('/')+'/api/v1/local-signer/status') -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 20
+  try{$status=Invoke-RestMethod -Method Post -Uri ($base.AbsoluteUri.TrimEnd('/')+'/api/v1/local-signer/status') -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 20}catch{Start-Sleep -Seconds 5;continue}
   if($status.status -eq 'ACTIVE'){$active=$true;break}
   if($status.status -ne 'PENDING'){Fail 'Подключение отклонено или ссылка устарела. Получите новый установщик командой /signer.'}
   Start-Sleep -Seconds 3
  }
  if(-not $active){Fail 'Подтверждение не получено. Запустите установщик повторно или получите новую ссылку через /signer.'}
  Stop-ScheduledTask -TaskName 'AvitoWarehouseSigner' -ErrorAction SilentlyContinue
- Copy-Item (Join-Path $PSScriptRoot 'agent.ps1') (Join-Path $dir 'agent.ps1') -Force
+ foreach($name in @('agent.ps1','policy.ps1')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $dir $name) -Force}
  $config=Join-Path $dir 'config.json'
  @{BackendUrl=$cfg.BackendUrl;SellerInn=$cfg.SellerInn;CertificateThumbprint=$cfg.CertificateThumbprint;SignerId=$cfg.SignerId;AgentTokenProtected=$cfg.AgentTokenProtected}|ConvertTo-Json|Set-Content -LiteralPath $config -Encoding UTF8
- $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy RemoteSigned -File `"$diragent.ps1`" -ConfigPath `"$config`""
+ $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (Get-AgentArguments $dir $config)
  $trigger=New-ScheduledTaskTrigger -AtLogOn -User $identity
  $principal=New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
  $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)

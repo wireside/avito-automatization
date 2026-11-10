@@ -89,7 +89,7 @@ async function submit() {
     error.value =
       e instanceof MarkingApiError
         ? markingLabel(e.code)
-        : 'Не удалось взять заказ в работу';
+        : 'Не удалось начать сборку';
   } finally {
     busy.value = false;
   }
@@ -98,10 +98,12 @@ async function submit() {
 <template>
   <v-dialog v-model="open" max-width="620" :persistent="busy"
     ><v-card class="pa-5"
-      ><h2 class="text-title-medium">Взять заказ в работу</h2>
+      ><h2 class="text-title-medium">Собрать заказ</h2>
       <p class="text-body-small text-secondary mt-3">
-        Состав и цена будут проверены в Авито. Если объявление уже сопоставлено
-        со складом, выбирать вариант повторно не нужно.
+        Резервируем вещи на складе и создаём задание на упаковку. Это не
+        подтверждение заказа в Авито. Состав будет проверен в Авито. Если
+        объявление уже сопоставлено со складом, выбирать вариант повторно не
+        нужно.
       </p>
       <v-alert v-if="error" type="warning" class="my-4">{{ error }}</v-alert>
       <div v-for="item in order.items" :key="item.avitoId" class="mt-4">
@@ -135,7 +137,7 @@ async function submit() {
         color="primary-strong"
         class="mt-4"
         @click="submit"
-        >Взять в работу</v-btn
+        >Начать сборку</v-btn
       ><v-btn variant="text" class="mt-2" :disabled="busy" @click="open = false"
         >Закрыть</v-btn
       ></v-card

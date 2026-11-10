@@ -1,9 +1,10 @@
 ﻿param([Parameter(Mandatory=$true)][string]$ConfigPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'policy.ps1')
 $cfg=Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 $base=[Uri]$cfg.BackendUrl
-if($base.Scheme -ne 'https'){throw 'HTTPS_REQUIRED'}
+if($base.Scheme -ne 'https' -or $base.UserInfo -or $base.Query -or $base.Fragment -or $base.AbsolutePath -ne '/'){throw 'HTTPS_REQUIRED'}
 $agentToken=$null
 if($cfg.PSObject.Properties.Name -contains 'AgentTokenProtected'){
  $secure=ConvertTo-SecureString $cfg.AgentTokenProtected;$ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
@@ -25,7 +26,7 @@ function Get-Certificate {
   $cert=$matches.Item(1)
   if(-not $cert.HasPrivateKey()){throw 'PRIVATE_KEY_NOT_AVAILABLE'}
   if([DateTime]$cert.ValidFromDate -gt (Get-Date) -or [DateTime]$cert.ValidToDate -le (Get-Date)){throw 'CERTIFICATE_EXPIRED'}
-  if($cert.SubjectName -notmatch ('(?:ИНН|INN|1\.2\.643\.3\.131\.1\.1)\s*=\s*"?'+[Regex]::Escape($cfg.SellerInn)+'(?:"|,|$)')){throw 'CERTIFICATE_INN_MISMATCH'}
+  if((Get-SignerInn $cert.SubjectName) -ne $cfg.SellerInn){throw 'CERTIFICATE_INN_MISMATCH'}
   return $cert
  }finally{$store.Close()}
 }
@@ -49,17 +50,7 @@ while($true){
   $reply=Call-Backend 'claim' @{signerId=$cfg.SignerId}
   if($null -eq $reply.task){Start-Sleep -Seconds 5;continue}
   $task=$reply.task
-  if($task.sellerInn -ne $cfg.SellerInn -or [DateTime]$task.expiresAt -le [DateTime]::UtcNow){throw 'TASK_POLICY_REJECTED'}
-  if($task.purpose -eq 'AUTH'){
-   if($task.documentType -ne 'CHZ_AUTH' -or $task.algorithm -ne 'GOST_CMS_ATTACHED'){throw 'TASK_POLICY_REJECTED'}
-  }elseif($task.purpose -eq 'DOCUMENT'){
-   if($task.documentType -notin @('LK_RECEIPT','LP_RETURN','LK_RECEIPT_CANCEL') -or $task.algorithm -ne 'GOST_CMS_DETACHED'){throw 'TASK_POLICY_REJECTED'}
-   $doc=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($task.payloadBase64))|ConvertFrom-Json
-   $docInn=if($task.documentType -eq 'LP_RETURN'){$doc.trade_participant_inn}else{$doc.inn}
-   if($docInn -ne $cfg.SellerInn){throw 'DOCUMENT_INN_MISMATCH'}
-  }else{throw 'TASK_POLICY_REJECTED'}
-  $bytes=[Convert]::FromBase64String($task.payloadBase64)
-  if($bytes.Length -gt 1048576 -or (Hash-Bytes $bytes) -ne $task.payloadHash){throw 'PAYLOAD_HASH_MISMATCH'}
+  Assert-SigningTask $task $cfg.SellerInn
   $signer=New-Object -ComObject CAdESCOM.CPSigner
   $signer.Certificate=$cert
   $signer.CheckCertificate=$true
@@ -70,8 +61,10 @@ while($true){
   $detached=$task.purpose -eq 'DOCUMENT'
   $signature=$data.SignCades($signer,1,$detached,0)
   $verifier=New-Object -ComObject CAdESCOM.CadesSignedData
-  if($detached){$verifier.ContentEncoding=1;$verifier.Content=$task.payloadBase64}
+  $verifier.ContentEncoding=1
+  if($detached){$verifier.Content=$task.payloadBase64}
   $verifier.VerifyCades($signature,1,$detached)
+  if(-not $detached){if((Hash-Bytes ([Convert]::FromBase64String($verifier.Content))) -cne $task.payloadHash){throw 'SIGNATURE_PAYLOAD_MISMATCH'}}
   if($verifier.Signers.Count -ne 1 -or $verifier.Signers.Item(1).Certificate.Thumbprint -ne $cfg.CertificateThumbprint){throw 'SIGNATURE_CERTIFICATE_MISMATCH'}
   Check-Chain $cert
   $submission=@{taskId=$task.taskId;leaseId=$task.leaseId;signerId=$cfg.SignerId;payloadHash=$task.payloadHash;signatureBase64=($signature -replace '\s','');certificateBase64=($cert.Export(0) -replace '\s','');verification=@{valid=$true;chainValid=$true;revocationChecked=$true;signerInn=$cfg.SellerInn;payloadHash=$task.payloadHash}}

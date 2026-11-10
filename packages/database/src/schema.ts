@@ -6,3 +6,5 @@ export * from './schema/history.js';
 export * from './schema/marking.js';
 export * from './schema/views.js';
 export * from './schema/pipeline.js';
+
+export * from './schema/avito-actions.js';

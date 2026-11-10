@@ -13,6 +13,7 @@ import {
 } from '@avito/domain';
 import { createDatabaseClient } from './client.js';
 import { createInventoryStore } from './inventory.js';
+import { readAvitoShipmentReference } from './avito-import.js';
 import { createMarkingPipelineStore } from './marking-pipeline.js';
 import { createMarkingWorkStore } from './provider-work.js';
 import {
@@ -164,7 +165,16 @@ const url =
         );
         const ids = await listEnqueueableOperationIds(db.db);
         if (!ids.length) return;
-        for (const id of ids) await process(id);
+        const relevant = (
+          await db.db.execute<{ id: string }>(
+            sql`SELECT id FROM integration_operations WHERE id IN (${sql.join(
+              ids.map((id) => sql`${id}::uuid`),
+              sql`, `,
+            )}) AND operation_type LIKE 'pipeline.%'`,
+          )
+        ).rows;
+        if (!relevant.length) return;
+        for (const row of relevant) await process(row.id);
       }
       throw Error('jobs did not settle');
     }
@@ -335,6 +345,28 @@ const url =
       );
       const next = await shipment(f);
       expect(next).not.toBe(id);
+      await command('pack', {
+        shipmentId: next,
+        raw: f.raw,
+        scannerProfile: 'camera-gs1-v1',
+      });
+      await drain();
+      await command('prepare', { shipmentId: next });
+      await drain();
+      const withdrawals = (
+        await db.db.execute<{ n: number }>(
+          sql`SELECT count(*)::int AS n FROM chz_operations co JOIN unit_markings m ON m.id=co.marking_id WHERE m.unit_id=${f.unitId} AND co.action='WITHDRAW' AND co.status='CONFIRMED'`,
+        )
+      ).rows[0]!.n;
+      expect(withdrawals).toBe(2);
+      const reference = await readAvitoShipmentReference(
+        db.db,
+        next,
+        'account',
+      );
+      expect(reference.items).toEqual([
+        { avitoId: '123', quantity: 1, priceMinor: 250000 },
+      ]);
     });
     it('keeps snapshot and idempotency through repeated packing requests', async () => {
       const f = await fixture(),
@@ -436,6 +468,58 @@ const url =
           )
         ).rows,
       ).toHaveLength(0);
+    });
+    it('compensates a confirmed withdrawal on cancellation before handover', async () => {
+      const f = await fixture(),
+        id = await shipment(f);
+      await command('pack', {
+        shipmentId: id,
+        raw: f.raw,
+        scannerProfile: 'camera-gs1-v1',
+      });
+      await drain();
+      await command('prepare', { shipmentId: id });
+      await drain();
+      await command('cancel', {
+        shipmentId: id,
+        reason: 'Отменён до передачи',
+        physicalPresenceConfirmed: true,
+      });
+      expect((await pipeline.read(actor, 'unit', f.unitId)).data).toMatchObject(
+        { current_state: 'QUARANTINE' },
+      );
+      await drain();
+      expect((await pipeline.read(actor, 'unit', f.unitId)).data).toMatchObject(
+        { current_state: 'AVAILABLE', legal_state: 'IN_CIRCULATION' },
+      );
+    });
+    it('withdraws an actual warehouse loss once and retains its final document', async () => {
+      const f = await fixture();
+      const result = await command('dispose', {
+        unitId: f.unitId,
+        reason: 'LOSS',
+        occurredAt: new Date().toISOString(),
+        evidenceReference: 'act:loss',
+        primaryDocument: {
+          number: 'LOSS-1',
+          date: new Date().toISOString().slice(0, 10),
+          name: 'Акт утраты',
+        },
+        confirmation: 'CONFIRM_IRREVERSIBLE',
+      });
+      await drain();
+      expect((await pipeline.read(actor, 'unit', f.unitId)).data).toMatchObject(
+        { current_state: 'LOST', legal_state: 'WITHDRAWN' },
+      );
+      expect(
+        (
+          await pipeline.read(
+            actor,
+            'export',
+            (result.result as { documentId: string }).documentId,
+          )
+        ).data,
+      ).toMatchObject({ legalCompleted: true });
     });
     it('exposes the actual integrations and has no runtime mode flag', async () => {
       const r = await pipeline.read(actor, 'integrations');

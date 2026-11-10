@@ -87,6 +87,7 @@ class ProviderFailure extends Error {
   }
 }
 export function createAvitoOrderReader(options: {
+  includePhotos?: boolean;
   clientId: string | undefined;
   clientSecret: string | undefined;
   fetch?: typeof fetch;
@@ -272,6 +273,7 @@ export function createAvitoOrderReader(options: {
     }
   }
   async function withPhotos(orders: z.infer<typeof orderSchema>[]) {
+    if (options.includePhotos === false) return orders.map(mapOrder);
     // Bound optional requests even if an order has many lines; share account budget.
     const candidates = new Set(
       orders

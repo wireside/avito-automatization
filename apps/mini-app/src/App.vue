@@ -100,6 +100,7 @@ const navigation = computed<
           @click="activePage = item.value"
           ><template #prepend
             ><DesignIcon
+              monochrome
               :name="
                 activePage === 'orders' && item.value === 'orders'
                   ? 'ordersActive'
@@ -236,16 +237,13 @@ const navigation = computed<
         height="52"
         width="65"
         variant="text"
-        :color="item.value === activePage ? 'primary' : 'muted'"
+        color="secondary"
         rounded="md"
         class="px-1 my-3"
-        :class="
-          item.value === activePage
-            ? 'bg-primary-soft text-primary'
-            : 'text-muted'
-        "
+        :class="item.value === activePage ? 'bg-primary-soft' : ''"
         :title="true ? item.label : `${item.label} — скоро`"
         ><DesignIcon
+          monochrome
           :name="
             activePage === 'orders' && item.value === 'orders'
               ? 'ordersActive'

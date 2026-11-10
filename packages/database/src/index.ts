@@ -10,3 +10,5 @@ export * from './provider-work.js';
 export * from './chz-session.js';
 export * from './avito-import.js';
 export * from './signer-enrollment.js';
+
+export * from './avito-actions.js';

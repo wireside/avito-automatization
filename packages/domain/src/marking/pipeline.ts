@@ -107,6 +107,10 @@ export interface PipelineStore {
 export function createMarkingPipeline(
   store: PipelineStore,
   options: {
+    validateShipment?: (
+      action: 'pack' | 'prepare' | 'handover',
+      input: PipelineInput,
+    ) => Promise<void>;
     importOrder?: (input: PipelineInput) => Promise<PipelineInput>;
   } = {},
 ) {
@@ -144,6 +148,11 @@ export function createMarkingPipeline(
           };
         return store.execute('create', imported, user.id);
       }
+      if (
+        (action === 'pack' || action === 'prepare' || action === 'handover') &&
+        !(action === 'handover' && input.occurredOutsideApp === true)
+      )
+        await options.validateShipment?.(action, input);
       return store.execute(action, input, user.id);
     },
     async read(

@@ -1,3 +1,15 @@
+import { createAvitoOrderLane } from '../infrastructure/avito-order-lane.js';
+import { assertCurrentShipment, readCurrentOrder } from '@avito/domain';
+import { readAvitoShipmentReference } from '@avito/database';
+import {
+  createExecuteAvitoAction,
+  PipelineError,
+  ProviderError,
+  TerminalOperationError,
+} from '@avito/domain';
+import { createAvitoActionStore } from '@avito/database';
+import { createAvitoActionProvider } from '../infrastructure/avito-actions.js';
+import { createAvitoOrderReader } from '../infrastructure/avito-orders.js';
 import { createSignerEnrollmentStore } from '@avito/database';
 import { createNotifySigner } from '@avito/domain';
 import { createSignerNotificationSender } from '../infrastructure/signer-notification.js';
@@ -88,31 +100,89 @@ export function createWorkerRuntime(config: AppConfig) {
       (config.SIGNER_TELEGRAM_ENROLLMENT_ENABLED &&
         (await registry.hasActive())),
   );
+  const actionReader = createAvitoOrderReader({
+    includePhotos: false,
+    clientId: config.AVITO_API_CLIENT_ID,
+    clientSecret: config.AVITO_API_CLIENT_SECRET,
+    acquireReadSlot: createAvitoReadLimiter(
+      queueConnection,
+      config.AVITO_API_CLIENT_ID ?? 'unconfigured',
+    ),
+  });
   const executeMarking = createMarkingExecutor({
     store: createMarkingWorkStore(database.db, protection),
     legal,
     sendMarkings: createAvitoMarkingSender({
+      readOrder: (id) => readCurrentOrder(actionReader, id),
       clientId: config.AVITO_API_CLIENT_ID,
       clientSecret: config.AVITO_API_CLIENT_SECRET,
       writesEnabled: config.AVITO_WRITES_ENABLED,
       acquireSlot: createAvitoReadLimiter(
         queueConnection,
-        (config.AVITO_API_CLIENT_ID ?? 'unconfigured') + ':markings',
+        config.AVITO_API_CLIENT_ID ?? 'unconfigured',
       ),
     }),
     submissionsEnabled: config.CHZ_DOCUMENT_SUBMISSION_ENABLED,
+    beforeDocumentSubmit: async (work) => {
+      if (work.shipmentId) {
+        const ref = await readAvitoShipmentReference(
+          database.db,
+          work.shipmentId,
+          config.AVITO_API_CLIENT_ID ?? '',
+        );
+        assertCurrentShipment(
+          await readCurrentOrder(actionReader, ref.externalOrderId),
+          ref,
+          'dispatch',
+        );
+      }
+    },
   });
+  const executeAction = createExecuteAvitoAction({
+    store: createAvitoActionStore(
+      database.db,
+      protection,
+      config.AVITO_API_CLIENT_ID ?? '',
+    ),
+    reader: actionReader,
+    writesEnabled: config.AVITO_WRITES_ENABLED,
+    provider: createAvitoActionProvider({
+      clientId: config.AVITO_API_CLIENT_ID,
+      clientSecret: config.AVITO_API_CLIENT_SECRET,
+      writesEnabled: config.AVITO_WRITES_ENABLED,
+      acquireSlot: createAvitoReadLimiter(
+        queueConnection,
+        config.AVITO_API_CLIENT_ID ?? 'unconfigured',
+      ),
+    }),
+  });
+  const orderLane = createAvitoOrderLane(database);
   const worker = createIntegrationWorker(
     workerConnection,
     createProcessIntegrationOperation({
       store,
       retryDelay: calculateRetryDelay,
       execute: (operation) =>
-        operation.operationType.startsWith('pipeline.')
-          ? executeMarking(operation.id)
-          : operation.operationType === 'signer.notify'
-            ? notifySigner(operation.id)
-            : executeSystemOperation(operation),
+        orderLane(operation.id, () =>
+          operation.operationType === 'avito.order-action'
+            ? executeAction(operation.id).catch((error: unknown) => {
+                if (
+                  error instanceof PipelineError ||
+                  (error instanceof ProviderError &&
+                    (!error.retryable || error.ambiguous))
+                ) {
+                  const terminal = new TerminalOperationError();
+                  terminal.name = error.code;
+                  throw terminal;
+                }
+                throw error;
+              })
+            : operation.operationType.startsWith('pipeline.')
+              ? executeMarking(operation.id)
+              : operation.operationType === 'signer.notify'
+                ? notifySigner(operation.id)
+                : executeSystemOperation(operation),
+        ),
     }),
   );
   worker.on('completed', (job) =>

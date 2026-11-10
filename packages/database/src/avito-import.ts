@@ -91,3 +91,35 @@ export async function prepareAvitoImport(
     availableActions: order.availableActions.map((a) => a.name),
   };
 }
+
+/** Only local identity and order composition; the caller must query Avito outside SQL. */
+export async function readAvitoShipmentReference(
+  db: Database,
+  id: string,
+  accountId: string,
+) {
+  const order = (
+    await db.execute<{ external_order_id: string; order_id: string }>(
+      sql`SELECT o.external_order_id,o.id AS order_id FROM shipments s JOIN orders o ON o.id=s.order_id JOIN sales_channels c ON c.id=o.channel_id WHERE s.id=${id} AND c.provider='AVITO' AND c.external_account_id=${accountId}`,
+    )
+  ).rows[0];
+  requirePipeline(order, 'ENTITY_NOT_FOUND');
+  const lines = (
+    await db.execute<{
+      external_line_key: string;
+      quantity: number;
+      unit_price_kopecks: string | null;
+    }>(
+      sql`SELECT external_line_key,quantity,unit_price_kopecks FROM order_items WHERE order_id=${order.order_id} ORDER BY external_line_key`,
+    )
+  ).rows;
+  return {
+    externalOrderId: order.external_order_id,
+    items: lines.map((i) => ({
+      avitoId: i.external_line_key,
+      quantity: i.quantity,
+      priceMinor:
+        i.unit_price_kopecks === null ? null : Number(i.unit_price_kopecks),
+    })),
+  };
+}

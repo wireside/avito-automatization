@@ -56,6 +56,7 @@ export type MarkingWork =
     }
   | {
       kind: 'document';
+      shipmentId?: string | null;
       documentId: string;
       documentType: string;
       status: string;
@@ -111,6 +112,9 @@ export function createMarkingExecutor(deps: {
     work: Extract<MarkingWork, { kind: 'markings' }>,
   ) => Promise<void>;
   submissionsEnabled: boolean;
+  beforeDocumentSubmit?: (
+    work: Extract<MarkingWork, { kind: 'document' }>,
+  ) => Promise<void>;
 }) {
   return async (id: string) => {
     const work = await deps.store.load(id);
@@ -173,6 +177,7 @@ export function createMarkingExecutor(deps: {
         await deps.store.defer(id, 'DOCUMENT_SUBMISSION_DISABLED', 60);
         return;
       }
+      await deps.beforeDocumentSubmit?.(work);
       await deps.legal.authorizeSubmission();
       await deps.store.submissionStarted(work.documentId);
       const externalId = await deps.legal.submit({

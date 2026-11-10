@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AvitoOrderActions from './marking/AvitoOrderActions.vue';
 import ImportAvitoOrderDialog from './marking/ImportAvitoOrderDialog.vue';
 import { computed, ref } from 'vue';
 import { useDisplay } from 'vuetify';
@@ -64,47 +65,40 @@ const statusColor = (value: string) =>
       : value === 'canceled'
         ? 'muted'
         : 'primary';
-const actionNames: Record<string, string> = {
-  confirm: 'Подтверждение заказа',
-  setMarkings: 'Передача маркировки',
-  perform: 'Подтверждение отправки',
-  receive: 'Подтверждение получения',
-  reject: 'Отмена',
-  setTrackNumber: 'Передача трек-номера',
-  fixTrackNumber: 'Исправление трек-номера',
-  acceptReturnOrder: 'Подтверждение возврата',
-  setCNCDetails: 'Подготовка самовывоза',
-  getCourierDeliveryRange: 'Интервалы курьера',
-  setCourierDeliveryRange: 'Выбор времени курьера',
-};
 </script>
 <template>
   <section aria-labelledby="orders-title">
-    <v-btn
-      v-if="
-        order &&
-        roles?.some((r) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(r)) &&
-        ['on_confirmation', 'ready_to_ship'].includes(order.status)
-      "
-      color="primary-strong"
-      class="mb-4"
-      @click="importOpen = true"
-      >Взять заказ в работу</v-btn
-    ><ImportAvitoOrderDialog
-      v-if="order"
-      v-model="importOpen"
-      :order="order"
-      :init-data="initData"
-      @done="emit('workStarted')"
-    />
-    <v-btn
+    <div
       v-if="selectedId"
-      variant="text"
-      color="primary"
-      class="px-0 mb-3"
-      @click="selectedId = null"
-      >← Заказы</v-btn
+      class="d-flex flex-wrap align-center ga-3 mb-4"
+      data-testid="order-toolbar"
     >
+      <v-btn
+        v-if="
+          order &&
+          roles?.some((r) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(r)) &&
+          ['on_confirmation', 'ready_to_ship'].includes(order.status)
+        "
+        color="primary-strong"
+        class="order-collect-button"
+        @click="importOpen = true"
+        >Собрать заказ</v-btn
+      ><ImportAvitoOrderDialog
+        v-if="order"
+        v-model="importOpen"
+        :order="order"
+        :init-data="initData"
+        @done="emit('workStarted')"
+      />
+      <v-btn
+        v-if="selectedId"
+        variant="text"
+        color="primary"
+        class="px-2"
+        @click="selectedId = null"
+        >← Заказы</v-btn
+      >
+    </div>
     <div class="d-flex align-start ga-3 mb-4 mb-md-5">
       <div class="min-w-0 flex-grow-1">
         <h1 id="orders-title" class="text-title-large orders-wrap">
@@ -419,15 +413,15 @@ const actionNames: Record<string, string> = {
             </div>
             <v-divider class="my-4" />
             <p class="text-body-small text-secondary">
-              Сопоставление со складом и резерв доступны через «Взять заказ в
-              работу».
+              Сопоставление со складом и резерв доступны через «Собрать заказ».
             </p>
           </v-card>
           <v-card class="pa-4 pa-md-6 mb-5"
             ><h2 class="text-title-medium mb-3">Просмотр заказа</h2>
             <p class="text-body-medium text-secondary">
-              Для сборки нажмите «Взять заказ в работу», затем откройте
-              «Упаковку». Подтверждайте и отменяйте сам заказ в Авито.
+              Для сборки нажмите «Собрать заказ», затем откройте «Упаковку».
+              Подтверждение и остальные доступные действия Авито находятся на
+              этом экране.
             </p>
           </v-card>
           <v-card class="pa-4 pa-md-6"
@@ -475,22 +469,14 @@ const actionNames: Record<string, string> = {
               Стоимость товаров из Авито. Не является выплатой или прибылью.
             </p></v-card
           >
-          <v-card v-if="order.availableActions.length" class="pa-4 pa-md-6"
-            ><h2 class="text-title-medium mb-3">Действия в Авито</h2>
-            <p
-              v-for="(action, index) in order.availableActions"
-              :key="index"
-              class="text-body-small text-secondary mt-2"
-            >
-              {{ actionNames[action.name] ?? action.name
-              }}{{ action.required ? ' · обязательно' : '' }}
-            </p>
-            <p class="text-body-small text-muted mt-3">
-              Действия маркетплейса выполняйте в Авито
-            </p></v-card
-          >
-        </v-col></v-row
-      >
+          <AvitoOrderActions
+            :order="order"
+            :init-data="initData"
+            :roles="roles ?? []"
+            @updated="detail.refetch()"
+            @packing="importOpen = true"
+          /> </v-col
+      ></v-row>
     </template>
   </section>
 </template>

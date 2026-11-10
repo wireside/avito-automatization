@@ -1,4 +1,10 @@
 import {
+  avitoActionCommandSchema,
+  avitoActionsResponseSchema,
+  avitoActionQueuedSchema,
+  courierOptionsSchema,
+} from './order-actions.js';
+import {
   signingOpenApiPaths,
   signerEnrollmentOpenApiPaths,
 } from './signing.js';
@@ -78,7 +84,7 @@ export function createPublicApiDocument() {
       title: 'Avito warehouse API',
       version: '1.0.0',
       description:
-        'Read-only live Avito orders, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. Real Avito and Chestny ZNAK adapters, durable warehouse commands and managed Windows CryptoPro signing. External writes require explicit backend configuration.',
+        'Live Avito orders and durable seller actions, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. Real Avito and Chestny ZNAK adapters, durable warehouse commands and managed Windows CryptoPro signing. External writes require explicit backend configuration.',
     },
     servers: [{ url: '/', description: 'The origin serving this API.' }],
     components: {
@@ -111,6 +117,7 @@ export function createPublicApiDocument() {
       },
     },
     paths: {
+      ...orderActionPaths(),
       ...markingOpenApiPaths(),
       ...signingOpenApiPaths(),
       ...signerEnrollmentOpenApiPaths(),
@@ -303,6 +310,123 @@ export function createPublicApiDocument() {
               'INVALID_MARKING, INVALID_GTIN or CATALOG_NOT_FOUND. No receipt was created.',
             ),
           },
+        },
+      },
+    },
+  };
+}
+
+function orderActionPaths() {
+  const id = {
+    name: 'id',
+    in: 'path',
+    required: true,
+    schema: { type: 'string', pattern: '^[0-9]{1,32}$' },
+  };
+  const op = {
+    name: 'operationId',
+    in: 'path',
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  };
+  const response = (schema: z.ZodType) => ({
+    '200': {
+      description: 'Current result',
+      content: { 'application/json': { schema: z.toJSONSchema(schema) } },
+    },
+    ...authErrors,
+    ...commonErrors,
+    '409': jsonResponse(
+      'ApiError',
+      'Action disabled, unavailable, pending or requires readback.',
+    ),
+    '429': jsonResponse('ApiError', 'Shared account rate limit.'),
+  });
+  return {
+    '/api/v1/orders/{id}/actions': {
+      get: {
+        operationId: 'listAvitoOrderActions',
+        tags: ['Orders'],
+        security,
+        parameters: [id],
+        responses: response(avitoActionsResponseSchema),
+      },
+      post: {
+        operationId: 'enqueueAvitoOrderAction',
+        tags: ['Orders'],
+        security,
+        parameters: [id],
+        description:
+          'OWNER/ADMIN/WAREHOUSE. UUID request is idempotent; worker rechecks availableActions before sending. No warehouse stock or legal CHZ state is fabricated.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: z.toJSONSchema(avitoActionCommandSchema),
+            },
+          },
+        },
+        responses: response(avitoActionQueuedSchema),
+      },
+    },
+    '/api/v1/orders/{id}/courier-options': {
+      post: {
+        operationId: 'getAvitoCourierOptions',
+        tags: ['Orders'],
+        security,
+        parameters: [id],
+        description:
+          'Read-only provider request. Address is in the body to keep it out of access logs.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: { address: { type: 'string', maxLength: 500 } },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        responses: response(courierOptionsSchema),
+      },
+    },
+    '/api/v1/orders/{id}/actions/{operationId}/reconcile': {
+      post: {
+        operationId: 'reconcileAvitoOrderAction',
+        tags: ['Orders'],
+        security,
+        parameters: [id, op],
+        description:
+          'Requeue readback only after an uncertain result. The durable send barrier is never reset.',
+        responses: {
+          '200': { description: 'Readback queued' },
+          ...authErrors,
+          '409': jsonResponse(
+            'ApiError',
+            'No uncertain action for this order.',
+          ),
+        },
+      },
+    },
+    '/api/v1/orders/{id}/actions/{operationId}/label': {
+      get: {
+        operationId: 'downloadAvitoOrderLabel',
+        tags: ['Orders'],
+        security,
+        parameters: [id, op],
+        responses: {
+          '200': {
+            description: 'Generated label',
+            content: {
+              'application/pdf': {
+                schema: { type: 'string', format: 'binary' },
+              },
+            },
+          },
+          ...authErrors,
+          '409': jsonResponse('ApiError', 'Label is not ready yet.'),
         },
       },
     },
