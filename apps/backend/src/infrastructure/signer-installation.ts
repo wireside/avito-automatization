@@ -37,6 +37,7 @@ export async function buildSignerInstaller(connection: {
     'install.ps1',
     'agent.ps1',
     'policy.ps1',
+    'crypto-check.ps1',
     'uninstall.ps1',
     'Установить.cmd',
     'ПРОЧИТАЙТЕ.txt',

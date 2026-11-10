@@ -59,6 +59,11 @@ jobs:
         run: |
           bash -n deploy/vps-deploy.sh
           python3 deploy/test_vps_deploy.py
+      - name: Check signer policy and crypto diagnostics without a token
+        shell: pwsh
+        run: |
+          ./apps/local-signer/tests/policy.tests.ps1
+          ./apps/local-signer/tests/crypto-check.tests.ps1
       - run: pnpm install --frozen-lockfile
       # db:migrate builds database workspace dependencies before loading the schema.
       - run: pnpm db:migrate

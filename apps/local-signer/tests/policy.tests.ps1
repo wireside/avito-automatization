@@ -25,5 +25,12 @@ $task=Task 'challenge bytes' 'AUTH' 'CHZ_AUTH';Assert-SigningTask $task '1234567
 $task.algorithm='GOST_CMS_DETACHED';Reject {Assert-SigningTask $task '123456789012'} 'Wrong AUTH signature format'
 $task=Task '{"trade_participant_inn":"123456789012","return_type":"REMOTE_SALE_RETURN"}' 'DOCUMENT' 'LP_RETURN';Assert-SigningTask $task '123456789012';$checks++
 $task.expiresAt=[DateTime]::UtcNow.AddSeconds(-1).ToString('o');Reject {Assert-SigningTask $task '123456789012'} 'Expired task'
+foreach($offset in @(-7,3)){
+ $task=Task 'challenge bytes' 'AUTH' 'CHZ_AUTH'
+ $task.expiresAt=[DateTimeOffset]::UtcNow.AddMinutes(-1).ToOffset([TimeSpan]::FromHours($offset)).ToString('o')
+ Reject {Assert-SigningTask $task '123456789012'} 'Expired task with explicit offset'
+ $task.expiresAt=[DateTimeOffset]::UtcNow.AddMinutes(2).ToOffset([TimeSpan]::FromHours($offset)).ToString('o')
+ Assert-SigningTask $task '123456789012';$checks++
+}
 $task=Task '{"inn":"123456789012","lk_receipt_id":"original"}' 'DOCUMENT' 'LK_RECEIPT_CANCEL';Assert-SigningTask $task '123456789012';$checks++
 Write-Output "PowerShell policy: $checks checks passed"

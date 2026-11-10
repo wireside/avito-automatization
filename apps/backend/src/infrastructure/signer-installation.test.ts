@@ -49,6 +49,7 @@ describe('Windows installer', () => {
       [
         'agent.ps1',
         'policy.ps1',
+        'crypto-check.ps1',
         'connection.json',
         'install.ps1',
         'uninstall.ps1',

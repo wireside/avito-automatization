@@ -9,7 +9,7 @@ function Get-AgentArguments([string]$Directory,[string]$ConfigPath) {
  return "-NoProfile -ExecutionPolicy RemoteSigned -File `"$script`" -ConfigPath `"$ConfigPath`""
 }
 function Assert-SigningTask($Task,[string]$SellerInn) {
- if($Task.sellerInn -ne $SellerInn -or [DateTime]$Task.expiresAt -le [DateTime]::UtcNow){throw 'TASK_POLICY_REJECTED'}
+ if($Task.sellerInn -ne $SellerInn -or [DateTimeOffset]$Task.expiresAt -le [DateTimeOffset]::UtcNow){throw 'TASK_POLICY_REJECTED'}
  $bytes=[Convert]::FromBase64String($Task.payloadBase64)
  if($bytes.Length -eq 0 -or $bytes.Length -gt 1048576){throw 'PAYLOAD_SIZE_INVALID'}
  $sha=[Security.Cryptography.SHA256]::Create()

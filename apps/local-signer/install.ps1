@@ -1,6 +1,7 @@
 ﻿param([string]$BootstrapPath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'policy.ps1')
+. (Join-Path $PSScriptRoot 'crypto-check.ps1')
 Add-Type -AssemblyName System.Windows.Forms
 function Fail([string]$Text){[Windows.Forms.MessageBox]::Show($Text,'Подключение подписи','OK','Warning')|Out-Null;exit 1}
 function Hash([string]$Text){$sha=[Security.Cryptography.SHA256]::Create();try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text)))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}}
@@ -9,7 +10,8 @@ function Unprotect([string]$Value){$secure=ConvertTo-SecureString $Value;$ptr=[R
 function RandomHex { $bytes=New-Object byte[] 32;$rng=[Security.Cryptography.RandomNumberGenerator]::Create();try{$rng.GetBytes($bytes);return ([BitConverter]::ToString($bytes)).Replace('-','').ToLowerInvariant()}finally{$rng.Dispose()}}
 if(-not $BootstrapPath){$BootstrapPath=Join-Path $PSScriptRoot 'connection.json'}
 try{$bootstrap=Get-Content -LiteralPath $BootstrapPath -Raw|ConvertFrom-Json;$base=[Uri]$bootstrap.backendUrl;if($base.Scheme -ne 'https' -or $base.UserInfo -or $base.Query -or $base.Fragment -or $base.AbsolutePath -ne '/' -or $bootstrap.ticket -notmatch '^[A-Za-z0-9_-]{43}$'){throw 'INVALID_BOOTSTRAP'}}catch{Fail 'Получите новый установщик в нашем Telegram-боте: /signer. Файл подключения отсутствует или повреждён.'}
-try{$probe=New-Object -ComObject CAdESCOM.Store;$probe.Open(2,'My',0);$probe.Close()}catch{Fail 'Не найден КриптоПро ЭЦП (CAdESCOM). Установите КриптоПро CSP, драйвер токена и КриптоПро ЭЦП Browser plug-in, затем запустите установщик снова. Инструкция: https://www.cryptopro.ru/products/cades/plugin/get_2_0'}
+$cryptoCheck=Test-SignerCryptoEnvironment
+if(-not $cryptoCheck.Ready){Fail (Format-SignerCryptoFailure $cryptoCheck)}
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 $dir=Join-Path $env:LOCALAPPDATA 'AvitoWarehouseSigner'
 $null=New-Item -ItemType Directory -Path $dir -Force
