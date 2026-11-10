@@ -23,12 +23,22 @@ Core constraints:
 - Preserve DataMatrix ASCII GS separators. Never trim or lossily normalize a CIS, and never log a full CIS.
 - Make every external mutation idempotent, durable, retry-safe, and auditable. A successful HTTP status alone is not business completion.
 - Keep Redis/BullMQ disposable. PostgreSQL owns pending operations, and recovery must re-enqueue them after queue loss.
-- Activate exactly one CHZ submission mode after the integration spike. Never submit the same withdrawal or return through two channels.
+- The implemented path is DIRECT_TRUE_API with the managed Windows CryptoPro signer; external sends require separate activation. Keep exactly one responsible CHZ submission channel. Never submit the same withdrawal or return through two channels.
 - Keep UKЭП private keys and PINs out of the cloud backend; use a local signer only for `DIRECT_TRUE_API`.
 - Do not add MoySklad to the required path or make it an inventory master without an explicit product decision, migration plan, and reconciliation design. Optional export/back-office adapters come after the local core works.
 - Label financial metrics as preliminary when settlements, fees, delivery costs, returns, or cost attribution are incomplete. This product is not the accounting or tax ledger.
 - Do not add a local cash-register application unless the fiscal model changes.
 - Never perform live external mutations without explicit environment configuration and user authorization.
+
+Accepted current scope:
+
+- Use a simple scan/collect/prepare/handover workflow. Do not add procurement forms or mandatory purchase-cost entry; legal sale prices come from the real Avito order.
+- Incoming UPD is signed in Saby; this app verifies its processed CHZ evidence. There is no Saby API/incoming-UPD signer in the current implementation.
+- Marketplace confirmation and local «Собрать заказ» are different commands. Seller actions use durable `/orders/:id/actions`; the legacy `/confirm` route remains closed.
+- Preserve the Avito send barrier and shared PostgreSQL order lane. Reconcile unknown results without resending mutations.
+- OWNER installs the Windows signer through `/signer` with one-use enrollment and approval. No PIN/private key or manually copied global agent secret in the standard flow.
+- Current hosting is the existing VPS plus Pages, released through CI/CD. Preserve `.env`, overrides, encryption keys and volumes. Do not push/deploy as an implicit completion step.
+- README and user-facing operational documentation are maintained in Russian. Clearly distinguish implemented features, future product design and unverified live/hardware assumptions.
 
 Implementation rules:
 
@@ -56,7 +66,7 @@ Backend layers:
 
 - Keep transport in `apps/backend/src/http`, `telegram`, and `jobs`; call domain scenarios from handlers.
 - Keep all business scenarios, their dependency contracts, checks and rules together under `packages/domain/src/<feature>`. Do not reintroduce `backend/src/application` or another application layer. Use typed injected functions for I/O; do not import config, frameworks, concrete database/provider clients or backend infrastructure into domain.
-- Group domain by feature (`auth`, `users`, `operations`, later inventory/orders/marking). Keep scenarios, rules and tests close to each other; extract a separate rules file only for real reuse. Import domain through `@avito/domain` from other packages and use relative imports internally to avoid self-barrel cycles.
+- Group domain by feature (`auth`, `users`, `inventory`, `orders`, `marking`, `operations`). Keep scenarios, rules and tests close to each other; extract a separate rules file only for real reuse. Import domain through `@avito/domain` from other packages and use relative imports internally to avoid self-barrel cycles.
 - Keep SQL/transactions and atomic integrity guards in `packages/database`, and concrete backend adapters in `apps/backend/src/infrastructure`. Database guards remain necessary for concurrency and direct writes; derive shared TypeScript status lists from domain where possible.
 - Wire dependencies and resource lifecycle in `bootstrap`; administrative CLI and development commands are separate composition roots.
 - Keep config in the backend-local `config/` module. Preserve the layer import restrictions in ESLint and the architecture in section 10.1 of `PROJECT_SPEC.md`.
