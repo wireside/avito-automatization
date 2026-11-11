@@ -57,7 +57,7 @@ try{
  }
  if(-not $active){Fail 'Подтверждение не получено. Запустите установщик повторно или получите новую ссылку через /signer.'}
  Stop-ScheduledTask -TaskName 'AvitoWarehouseSigner' -ErrorAction SilentlyContinue
- foreach($name in @('agent.ps1','policy.ps1')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $dir $name) -Force}
+ foreach($name in @('agent.ps1','policy.ps1','crypto-com.ps1')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $dir $name) -Force}
  $config=Join-Path $dir 'config.json'
  @{BackendUrl=$cfg.BackendUrl;SellerInn=$cfg.SellerInn;CertificateThumbprint=$cfg.CertificateThumbprint;SignerId=$cfg.SignerId;AgentTokenProtected=$cfg.AgentTokenProtected}|ConvertTo-Json|Set-Content -LiteralPath $config -Encoding UTF8
  $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (Get-AgentArguments $dir $config)

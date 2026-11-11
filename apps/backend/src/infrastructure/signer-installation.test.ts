@@ -50,6 +50,7 @@ describe('Windows installer', () => {
         'agent.ps1',
         'policy.ps1',
         'crypto-check.ps1',
+        'crypto-com.ps1',
         'connection.json',
         'install.ps1',
         'uninstall.ps1',
@@ -65,5 +66,6 @@ describe('Windows installer', () => {
     expect(strFromU8(zip['install.ps1']!)).not.toContain('Read-Host');
     expect(strFromU8(zip['Установить.cmd']!)).not.toContain('Bypass');
     expect([...zip['agent.ps1']!.slice(0, 3)]).toEqual([239, 187, 191]);
+    expect([...zip['crypto-com.ps1']!.slice(0, 3)]).toEqual([239, 187, 191]);
   });
 });

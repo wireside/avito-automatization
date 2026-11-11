@@ -1,4 +1,6 @@
-﻿function Test-SignerCryptoEnvironment {
+﻿. (Join-Path $PSScriptRoot 'crypto-com.ps1')
+
+function Test-SignerCryptoEnvironment {
  param([scriptblock]$CreateStore = { New-Object -ComObject CAdESCOM.Store })
  $stage='CREATE_STORE'
  $store=$null
@@ -12,9 +14,9 @@
  try {
   $store=& $CreateStore
   $stage='OPEN_CURRENT_USER_MY'
-  $store.Open(2,'My',0)
+  $null=Invoke-SignerComMethod $store 'Open' @(2,'My',0)
   $stage='CLOSE_STORE'
-  $store.Close()
+  $null=Invoke-SignerComMethod $store 'Close'
   $result.Ready=$true
   $result.Stage='COMPLETE'
  }catch {
