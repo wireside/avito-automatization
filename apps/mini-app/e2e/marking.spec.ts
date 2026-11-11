@@ -462,29 +462,72 @@ test('viewer sees document results without export or correction controls', async
   ).toHaveCount(0);
 });
 
-test('owner requests a Windows installer without entering any agent credentials', async ({
-  page,
-}) => {
-  await setup(page);
-  await page.route('**/api/v1/local-signer/install-link', (r) =>
-    r.fulfill({
-      json: {
-        url: 'https://api.example.com/signer/install#' + 'a'.repeat(43),
-        expiresAt: '2027-01-01T00:00:00.000Z',
-      },
-    }),
-  );
-  await page
-    .getByRole('navigation', { name: 'Основная навигация' })
-    .getByText('Настройки', { exact: true })
-    .click();
-  await page
-    .getByRole('button', { name: 'Подключить Windows', exact: true })
-    .click();
-  await expect(
-    page.getByRole('textbox', { name: 'Ссылка для Windows · 30 минут' }),
-  ).toHaveValue('https://api.example.com/signer/install#' + 'a'.repeat(43));
-  await expect(
-    page.getByRole('link', { name: 'Открыть установку' }),
-  ).toHaveAttribute('rel', 'noopener noreferrer');
-});
+for (const client of ['native', 'missing', 'throws'] as const)
+  test(`owner opens the installer through Telegram or gets a manual fallback: ${client}`, async ({
+    page,
+  }, testInfo) => {
+    await setup(page);
+    const url = 'https://api.example.com/signer/install#' + 'a'.repeat(43);
+    await page.route('**/api/v1/local-signer/install-link', (r) =>
+      r.fulfill({ json: { url, expiresAt: '2027-01-01T00:00:00.000Z' } }),
+    );
+    await page.evaluate((client) => {
+      if (client !== 'missing') {
+        window.Telegram!.WebApp.openLink = (url, options) => {
+          if (client === 'throws') throw Error('unsupported');
+          sessionStorage.setItem(
+            'installer-open',
+            JSON.stringify({ url, options }),
+          );
+        };
+      }
+    }, client);
+    const popups: unknown[] = [];
+    page.on('popup', (popup) => popups.push(popup));
+    await page
+      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByText('Настройки', { exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Подключить Windows', exact: true })
+      .click();
+    await expect(
+      page.getByRole('textbox', { name: 'Ссылка для Windows · 30 минут' }),
+    ).toHaveValue(url);
+    await page.getByRole('button', { name: 'Открыть установку' }).click();
+    if (client === 'native') {
+      expect(
+        await page.evaluate(() => sessionStorage.getItem('installer-open')),
+      ).toBe(JSON.stringify({ url, options: { try_instant_view: false } }));
+    } else {
+      await expect(page.getByRole('alert')).toContainText(
+        'Нажмите «Скопировать ссылку»',
+      );
+      await expect(
+        page.getByRole('button', { name: 'Скопировать ссылку' }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(() => sessionStorage.getItem('installer-open')),
+      ).toBeNull();
+    }
+    expect(popups).toHaveLength(0);
+    await expect(
+      page.getByRole('link', { name: 'Открыть установку' }),
+    ).toHaveCount(0);
+    if (client === 'native') {
+      for (const width of [390, 1440]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await page
+          .locator('.v-card')
+          .filter({
+            has: page.getByRole('heading', {
+              name: 'Локальный подписант',
+              exact: true,
+            }),
+          })
+          .screenshot({
+            path: testInfo.outputPath(`signer-buttons-${width}.png`),
+          });
+      }
+    }
+  });

@@ -51,6 +51,21 @@ async function installSigner() {
     installBusy.value = false;
   }
 }
+function openInstallLink() {
+  installError.value = '';
+  const app = window.Telegram?.WebApp;
+  try {
+    if (app?.openLink && app.isVersionAtLeast?.('6.1') !== false) {
+      app.openLink(installUrl.value, { try_instant_view: false });
+      return;
+    }
+  } catch {
+    // Older clients can expose an SDK method without supporting it.
+  }
+  // A window opened from Telegram Web can inherit its download restrictions.
+  installError.value =
+    'Нажмите «Скопировать ссылку», откройте новую вкладку Chrome на Windows и вставьте ссылку в адресную строку.';
+}
 async function copyInstallLink() {
   try {
     await navigator.clipboard.writeText(installUrl.value);
@@ -149,23 +164,37 @@ function open(value: MarkingAction, row?: Record<string, string>) {
           <v-alert v-if="installError" type="warning" class="mt-3">{{
             installError
           }}</v-alert>
-          <template v-if="installUrl"
-            ><v-text-field
+          <template v-if="installUrl">
+            <v-text-field
               :model-value="installUrl"
               readonly
               label="Ссылка для Windows · 30 минут"
               class="mt-3"
-            /><v-btn variant="text" @click="copyInstallLink">{{
-              copied ? 'Ссылка скопирована' : 'Скопировать ссылку'
-            }}</v-btn
-            ><v-btn
-              :href="installUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="text"
-              >Открыть установку</v-btn
-            ></template
-          >
+            />
+            <div class="d-flex flex-column flex-sm-row ga-2 mt-3">
+              <v-btn
+                color="primary"
+                variant="outlined"
+                class="flex-grow-1"
+                @click="copyInstallLink"
+              >
+                {{ copied ? 'Ссылка скопирована' : 'Скопировать ссылку' }}
+              </v-btn>
+              <v-btn
+                color="primary-strong"
+                variant="flat"
+                class="flex-grow-1"
+                @click="openInstallLink"
+              >
+                Открыть установку
+              </v-btn>
+            </div>
+            <p class="text-body-small text-secondary mt-2">
+              Установка откроется во внешнем браузере. Если архив не
+              скачивается, скопируйте ссылку и вставьте её в новую вкладку
+              Chrome на Windows.
+            </p>
+          </template>
           <v-chip color="raised" class="mt-4 text-secondary"
             >Состояние подключения показано выше</v-chip
           >
