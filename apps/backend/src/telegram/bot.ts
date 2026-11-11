@@ -1,7 +1,8 @@
 import type { SignerEnrollment, SessionUser } from '@avito/domain';
 import { PipelineError } from '@avito/domain';
 import { signerApprovalMessage } from './signer-message.js';
-import { Markup, Telegraf, type Context } from 'telegraf';
+import { Markup, type Context } from 'telegraf';
+import { RecoveringTelegraf } from './recovering-telegraf.js';
 
 export function createTelegramBot(
   token: string,
@@ -11,7 +12,7 @@ export function createTelegramBot(
     findUser: (telegramId: string) => Promise<SessionUser | undefined>;
   },
 ) {
-  const bot = new Telegraf(token, { handlerTimeout: 15_000 });
+  const bot = new RecoveringTelegraf(token, { handlerTimeout: 15_000 });
 
   const menuButton = {
     type: 'web_app' as const,
