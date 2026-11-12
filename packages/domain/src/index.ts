@@ -16,3 +16,5 @@ export * from './marking/enrollment.js';
 export * from './orders/actions.js';
 
 export * from './orders/shipment.js';
+
+export * from './marking/warehouses.js';

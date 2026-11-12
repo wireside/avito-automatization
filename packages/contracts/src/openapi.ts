@@ -1,3 +1,4 @@
+import { warehouseOpenApiPaths } from './warehouses.js';
 import {
   avitoActionCommandSchema,
   avitoActionsResponseSchema,
@@ -118,6 +119,7 @@ export function createPublicApiDocument() {
     },
     paths: {
       ...orderActionPaths(),
+      ...warehouseOpenApiPaths(),
       ...markingOpenApiPaths(),
       ...signingOpenApiPaths(),
       ...signerEnrollmentOpenApiPaths(),

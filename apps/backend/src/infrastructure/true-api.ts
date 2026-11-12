@@ -232,6 +232,59 @@ export function createTrueApiClient(options: {
   };
   return {
     ...client,
+    async places(inn: string) {
+      const entry = z.object({
+        inn: z.string(),
+        productGroups: z.array(z.string()),
+        fiasId: z.uuid().nullish(),
+        address: z.string().nullish(),
+      });
+      const schema = z.object({
+        result: z.array(entry).max(1000),
+        total: z.number().int().nonnegative().max(100000),
+        nextPage: z.boolean(),
+      });
+      const items = new Map<string, { fiasId: string; address: string }>();
+      let incompleteCount = 0,
+        count = 0,
+        total: number | undefined;
+      for (let page = 0; page < 100; page++) {
+        const query = new URLSearchParams({
+          inns: inn,
+          productGroups: 'lp',
+          limit: '1000',
+          page: String(page),
+        });
+        const response = schema.safeParse(
+          await request('/api/v3/true-api/mods/list?' + query.toString()),
+        );
+        if (!response.success) throw new ProviderError('CHZ_INVALID_RESPONSE');
+        const data = response.data;
+        total ??= data.total;
+        if (data.total !== total || (data.nextPage && data.result.length === 0))
+          throw new ProviderError('CHZ_PLACES_CHANGED', true);
+        count += data.result.length;
+        for (const row of data.result) {
+          if (row.inn !== inn || !row.productGroups.includes('lp'))
+            throw new ProviderError('CHZ_PLACES_RESPONSE_MISMATCH');
+          if (!row.fiasId || !row.address?.trim()) {
+            incompleteCount++;
+            continue;
+          }
+          const previous = items.get(row.fiasId);
+          if (previous && previous.address !== row.address)
+            throw new ProviderError('CHZ_PLACES_CHANGED', true);
+          items.set(row.fiasId, { fiasId: row.fiasId, address: row.address });
+        }
+        if (count > total) throw new ProviderError('CHZ_INVALID_RESPONSE');
+        if (!data.nextPage) {
+          if (count !== total)
+            throw new ProviderError('CHZ_PLACES_CHANGED', true);
+          return { items: [...items.values()], incompleteCount };
+        }
+      }
+      throw new ProviderError('CHZ_RESPONSE_TOO_LARGE');
+    },
     async challenge() {
       const parsed = challenge.safeParse(
         await request('/api/v3/true-api/auth/key', undefined, false),

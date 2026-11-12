@@ -48,6 +48,8 @@ export const markingLabels: Record<string, string> = {
   SUBMISSION_RESULT_UNKNOWN: 'Результат отправки неизвестен — нужна сверка',
   CHZ_PROCESSING: 'Документ обрабатывается в ЧЗ',
   CHZ_CODE_RESPONSE_INCOMPLETE: 'ЧЗ не вернул результат по коду',
+  SELLER_NOT_CONFIGURED: 'Сначала настройте адрес отгрузки выбранного склада',
+  WAREHOUSE_UNAVAILABLE: 'Выбранный склад недоступен. Обновите список складов',
   ORDER_MAPPING_REQUIRED: 'Укажите вариант товара для объявления',
   LEGAL_PROVIDER_DISABLED: 'Интеграция не подключена',
   SUPPLY_NOT_CONFIRMED: 'Нет подтверждения документов поставщика',

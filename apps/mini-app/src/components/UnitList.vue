@@ -3,6 +3,7 @@ import { computed, ref, defineAsyncComponent } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import type { InventoryUnitsResponse } from '@avito/contracts';
 import { createInventoryApi } from '../inventory-api';
+import { useWarehouses } from '../composables/useWarehouses';
 import { layout } from '../design/tokens';
 const UnitLegalStatus = defineAsyncComponent(
   () => import('./marking/UnitLegalStatus.vue'),
@@ -13,12 +14,18 @@ const props = defineProps<{
   roles?: string[];
 }>();
 const offset = ref(0);
+const { warehouseId } = useWarehouses(props.initData);
 const api = createInventoryApi(props.initData);
 const units = useQuery({
-  queryKey: computed(() => ['inventory-units', props.variantId, offset.value]),
+  queryKey: computed(() => [
+    'inventory-units',
+    warehouseId.value,
+    props.variantId,
+    offset.value,
+  ]),
   queryFn: ({ signal }) =>
     api<InventoryUnitsResponse>(
-      `/variants/${props.variantId}/units?offset=${offset.value}`,
+      `/variants/${props.variantId}/units?offset=${offset.value}${warehouseId.value ? '&warehouseId=' + warehouseId.value : ''}`,
       undefined,
       signal,
     ),

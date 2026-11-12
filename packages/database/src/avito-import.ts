@@ -18,7 +18,7 @@ export async function prepareAvitoImport(
   );
   const warehouse = (
     await db.execute<{ warehouse_id: string }>(
-      sql`SELECT warehouse_id FROM marking_pipeline_settings WHERE (${typeof input.warehouseId === 'string' ? input.warehouseId : null}::uuid IS NULL OR warehouse_id=${typeof input.warehouseId === 'string' ? input.warehouseId : null}::uuid) ORDER BY warehouse_id LIMIT 1`,
+      sql`SELECT s.warehouse_id FROM marking_pipeline_settings s JOIN warehouses w ON w.id=s.warehouse_id WHERE w.archived_at IS NULL AND (${typeof input.warehouseId === 'string' ? input.warehouseId : null}::uuid IS NULL AND w.code='MAIN' OR s.warehouse_id=${typeof input.warehouseId === 'string' ? input.warehouseId : null}::uuid) ORDER BY s.warehouse_id LIMIT 1`,
     )
   ).rows[0];
   requirePipeline(warehouse, 'SELLER_NOT_CONFIGURED');

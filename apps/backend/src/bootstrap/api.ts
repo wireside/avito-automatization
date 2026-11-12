@@ -1,3 +1,9 @@
+import {
+  createWarehouseSettingsStore,
+  createChzSessionStore,
+} from '@avito/database';
+import { createWarehouseSettings } from '@avito/domain';
+import { createTrueApiClient } from '../infrastructure/true-api.js';
 import { assertCurrentShipment } from '@avito/domain';
 import { readAvitoShipmentReference } from '@avito/database';
 import { createAvitoOrderActions } from '@avito/domain';
@@ -74,6 +80,9 @@ export async function createApiRuntime(config: AppConfig) {
         ),
       }
     : undefined;
+  const placesClient = createTrueApiClient({
+    session: createChzSessionStore(database.db, protection),
+  });
   const bot =
     config.TELEGRAM_MODE !== 'disabled' &&
     config.TELEGRAM_BOT_TOKEN &&
@@ -142,6 +151,10 @@ export async function createApiRuntime(config: AppConfig) {
       ),
     ),
 
+    warehouseSettings: createWarehouseSettings({
+      store: createWarehouseSettingsStore(database.db),
+      places: (inn) => placesClient.places(inn),
+    }),
     markingPipeline: createMarkingPipeline(
       createMarkingPipelineStore(
         database.db,

@@ -12,3 +12,5 @@ export * from './avito-import.js';
 export * from './signer-enrollment.js';
 
 export * from './avito-actions.js';
+
+export * from './warehouses.js';

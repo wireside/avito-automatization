@@ -3404,9 +3404,56 @@
       "get": {
         "operationId": "true_api_get_api_v3_true_api_mods_list",
         "summary": "Метод получения списка МОД по участнику оборота товаров",
-        "tags": ["3"],
+        "tags": [
+          "3"
+        ],
         "description": "**Source-documentation operation, not a complete generated-client contract.**\n\n### true-api, PDF pp. 25-26, section 3.5\n\n[Original PDF](/docs/chz/sources/true-api.pdf#page=25)\n\n```text\n3.5. Метод получения списка МОД по участнику оборота товаров\nМетод возвращает список мест осуществления деятельности участника оборота товаров, кроме удалённых, свозможностью указания параметров фильтрации в запросе.\nТип приватности: публичный\nURL: /api/v3/true-api/mods/list\nМетод: GET\nПример запроса:\nПараметры строки запроса:\nПараметр Тип Обяз. Описание Комментарий\nproductGroups array ofstrings - Список товарныхгрупп См. «Справочник «Список поддерживаемыхтоварных групп»».\nЕсли не будет указан, то в ответе вернутсяМОД по всем товарным группам\nkpp string - КПП Для юридических лиц. Если не будетуказан, то в ответе вернутся все МОД\nfiasId string - ИдентификаторФИАС Если не будет указан, то в ответе вернутсявсе МОД\ninns array ofstrings - Список ИННучастниковоборота товаров\nМаксимально допустимое значение — 10.\nЕсли не будет указан, то в ответе вернутсявсе МОД участника оборота товаров,осуществляющего запрос\nlimit integer - Максимальноеколичествозаписей настраницерезультата поиска\nМаксимально допустимое значение — 1000,минимально допустимое значение — 1.Значение по умолчанию: 100\n[credential/request example omitted]\n уколичестве и объёмеоборота товаров\n8.3.25. Получение свпродаже агентами топоставленных участн\n8.3.26. Получение свпо разрешительной дкарточках товаров\n8.3.27. Получение свеошибкам в документ\n8.3.28. Получение свисходящим документ\n8.3.29. Получение свколичеству КМ с недразрешительной док\n8.3.30. Получение свстатуса РД и по спис\n8.4. Пример ответа дляформируемых запросов\n8.5. Метод получения свыгрузку\n8.5.1. Метод полученизаданий на выгрузку\n8.6. Метод получения рID выгрузок данных\n8.7. Метод получения Zвыгрузки\n8.7.1. Метод получениостаткам товаров\n8.7.2. Метод полученрезультатам обработ\n8.7.3. Метод полученКИ участника оборотзаданному фильтру\n8.7.4. Метод полученсведениями о движеидентификации по агкомиссионной схеме\n8.7.5. Метод полученсведениями о докумагентско-комиссионн\n8.7.6. Метод полученоптовым и розничныразрезе ИНН\n8.7.7. Метод получениоборачиваемости то\n8.7.8. Метод полученрозничных продаж ви адресам\n8.7.9. Метод полученсредневзвешенной цGTIN\n8.7.10. Метод полученперечнем кодов товаопределённого прои\n8.7.11. Метод полученошибками в чеках\n8.7.12. Метод полученошибками в УД\n8.7.13. Метод полученкарточкам товаров\nПараметр Тип Обяз. Описание Комментарий\npage integer - Номер страницы Используется для пагинации. Начинается с«0». Значение по умолчанию: 0\nПримеры ответов:\n В случае успеха:\n```",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "inns",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 10
+            }
+          },
+          {
+            "name": "productGroups",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
         "responses": {
           "default": {
             "description": "See complete success/error tables in the source below. Unknown response shape is deliberately unrestricted.",
@@ -3415,20 +3462,82 @@
                 "schema": {}
               }
             }
+          },
+          "200": {
+            "description": "Typed subset consumed by warehouse setup; address and fiasId may be absent. Live account not verified.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "total",
+                    "nextPage"
+                  ],
+                  "properties": {
+                    "result": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "inn",
+                          "productGroups"
+                        ],
+                        "properties": {
+                          "inn": {
+                            "type": "string"
+                          },
+                          "productGroups": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "address": {
+                            "type": "string"
+                          },
+                          "fiasId": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "nextPage": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
-        "x-contract-level": "source-documentation",
+        "x-contract-level": "typed-subset",
         "x-source": [
           {
             "document": "true-api",
-            "pages": [25, 26],
+            "pages": [
+              25,
+              26
+            ],
             "declarationPage": 25,
             "section": "3.5",
             "title": "Метод получения списка МОД по участнику оборота товаров"
           }
         ],
         "x-side-effects": "read-only",
-        "x-live-verified": false
+        "x-live-verified": false,
+        "x-current-documentation": {
+          "url": "https://docs.crpt.ru/gismt/True_API/",
+          "version": "755.0",
+          "date": "2026-11-11",
+          "checkedAt": "2026-11-12",
+          "section": "3.5"
+        }
       }
     },
     "/api/v3/true-api/mrd/delegation/search": {

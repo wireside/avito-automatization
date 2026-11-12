@@ -46,6 +46,7 @@ export function registerInventoryRoutes(
       user,
       params.data.id,
       query.data.offset,
+      query.data.warehouseId,
     );
     if (!result.ok) return sendApiError(reply, request, result.code);
     return inventoryUnitsResponseSchema.parse(result);

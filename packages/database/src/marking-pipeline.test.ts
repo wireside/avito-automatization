@@ -12,6 +12,7 @@ import {
   type ProviderDocument,
 } from '@avito/domain';
 import { createDatabaseClient } from './client.js';
+import { createWarehouseSettingsStore } from './warehouses.js';
 import { createInventoryStore } from './inventory.js';
 import { readAvitoShipmentReference } from './avito-import.js';
 import { createMarkingPipelineStore } from './marking-pipeline.js';
@@ -273,13 +274,20 @@ const url =
           sql`SELECT id FROM warehouses WHERE code='MAIN'`,
         )
       ).rows[0]!.id;
-      await command('configure', {
-        warehouseId,
-        sellerInn: inn,
-        fiasId: randomUUID(),
-        address: 'Склад',
-        fiscalEvidenceReference: 'contract:verified',
-      });
+      const warehouseSettings = createWarehouseSettingsStore(db.db);
+      await warehouseSettings.connect(inn, actor.id);
+      const place = { fiasId: randomUUID(), address: 'Склад' };
+      await warehouseSettings.save(
+        {
+          requestId: randomUUID(),
+          warehouseId,
+          name: 'Основной склад',
+          fiasId: place.fiasId,
+        },
+        place,
+        inn,
+        actor.id,
+      );
       const days = [];
       for (let i = -1; i < 40; i++) {
         const d = new Date();
@@ -520,6 +528,29 @@ const url =
           )
         ).data,
       ).toMatchObject({ legalCompleted: true });
+    });
+    it('blocks changing the dispatch place while a warehouse has open sale cycles', async () => {
+      const f = await fixture();
+      await shipment(f);
+      const warehouseSettings = createWarehouseSettingsStore(db.db);
+      const place = { fiasId: randomUUID(), address: 'Другой адрес' };
+      await expect(
+        warehouseSettings.save(
+          {
+            requestId: randomUUID(),
+            warehouseId,
+            name: 'Основной склад',
+            fiasId: place.fiasId,
+          },
+          place,
+          inn,
+          actor.id,
+        ),
+      ).rejects.toThrow('CONFIGURATION_IN_USE');
+      expect(
+        (await warehouseSettings.list()).find((w) => w.id === warehouseId)
+          ?.address,
+      ).toBe('Склад');
     });
     it('exposes the actual integrations and has no runtime mode flag', async () => {
       const r = await pipeline.read(actor, 'integrations');

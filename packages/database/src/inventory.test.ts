@@ -364,4 +364,51 @@ suite('catalog-backed warehouse receipt without review', () => {
       ).rows,
     ).toHaveLength(0);
   });
+  it('keeps scans, stock, expanded units and network retries bound to the selected warehouse', async () => {
+    const warehouseId = randomUUID();
+    await client!.db.execute(
+      sql`INSERT INTO warehouses(id,code,name) VALUES(${warehouseId},${'W-' + warehouseId},'Другой склад')`,
+    );
+    await client!.db.execute(
+      sql`INSERT INTO stock_locations(warehouse_id,code,name,kind) VALUES(${warehouseId},'STOCK','Хранение второго склада','SELLABLE')`,
+    );
+    const input = { ...scan('TEST000000020'), warehouseId };
+    const accepted = await receive(user, input);
+    if (!accepted.ok) throw Error('receipt');
+    const page = await store!.list({
+      warehouseId,
+      search: '',
+      offset: 0,
+      limit: 40,
+    });
+    expect(page.warehouse.id).toBe(warehouseId);
+    expect(page.totals.onHand).toBe(1);
+    expect(
+      (await store!.units(accepted.unit.variantId, 0, warehouseId)).items.map(
+        (u) => u.id,
+      ),
+    ).toEqual([accepted.unit.id]);
+    expect(
+      (await store!.units(accepted.unit.variantId, 0)).items.some(
+        (u) => u.id === accepted.unit.id,
+      ),
+    ).toBe(false);
+    expect(await receive(user, input)).toMatchObject({
+      ok: true,
+      replayed: true,
+    });
+    const { warehouseId: _warehouseId, ...otherTarget } = input;
+    void _warehouseId;
+    expect(await receive(user, otherTarget)).toEqual({
+      ok: false,
+      code: 'IDEMPOTENCY_CONFLICT',
+    });
+    expect(
+      await receive(user, { ...input, requestId: randomUUID() }),
+    ).toMatchObject({ ok: true, outcome: 'DUPLICATE' });
+    expect(
+      (await store!.list({ warehouseId, search: '', offset: 0, limit: 40 }))
+        .totals.onHand,
+    ).toBe(1);
+  });
 });

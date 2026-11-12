@@ -1,3 +1,5 @@
+import { registerWarehouseRoutes } from './routes/warehouses.js';
+import type { WarehouseSettings } from '@avito/domain';
 import { registerAvitoActionRoutes } from './routes/order-actions.js';
 import type { AvitoOrderActions } from '@avito/domain';
 import { registerSignerEnrollmentRoutes } from './routes/signer-enrollment.js';
@@ -27,6 +29,7 @@ import {
 } from './routes/telegram-webhook.js';
 
 export interface HttpServices {
+  warehouseSettings?: WarehouseSettings;
   avitoOrderActions?: AvitoOrderActions;
   localSigner?: LocalSignerService;
   localSignerToken?: string;
@@ -70,6 +73,7 @@ export async function buildApp(
   registerHttpErrors(app);
   registerOpenApiRoute(app);
   registerInventoryRoutes(app, services);
+  registerWarehouseRoutes(app, services);
   registerMarkingRoutes(app, services);
   registerSignerEnrollmentRoutes(app, services);
   registerLocalSignerRoutes(

@@ -28,7 +28,6 @@ const titles: Partial<Record<MarkingAction, string>> = {
   return: 'Принять возврат',
   cancel: 'Отменить посылку',
   dispose: 'Утрата / уничтожение',
-  configure: 'Реквизиты ИП',
   calendar: 'Календарь рабочих дней',
   supply: 'Документы поставщика',
   retry: 'Повтор фоновой операции',
@@ -41,17 +40,6 @@ const hasDocument = computed(
 );
 const fields = computed<[string, string][]>(() => {
   switch (props.action) {
-    case 'configure':
-      return [
-        ['sellerInn', 'ИНН ИП · 12 цифр'],
-        ['warehouseId', 'Идентификатор склада'],
-        ['fiasId', 'ФИАС'],
-        ['address', 'Адрес склада'],
-        [
-          'fiscalEvidenceReference',
-          'Подтверждение кассовой / договорной схемы',
-        ],
-      ];
     case 'supply':
       return [
         ['documentNumber', 'Номер документа поставщика'],
@@ -113,11 +101,7 @@ async function submit() {
       invalid.value = 'Загрузите массив дат в формате JSON.';
       return;
     }
-  } else if (props.action === 'configure')
-    payload = Object.fromEntries(
-      fields.value.map(([key]) => [key, f.value[key]]),
-    );
-  else if (props.action === 'supply')
+  } else if (props.action === 'supply')
     payload = {
       documentNumber: f.value.documentNumber,
       documentDate: f.value.documentDate,

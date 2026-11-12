@@ -96,7 +96,7 @@ export const settingsSchema = z.array(
     seller_inn: z.string(),
     fias_id: id,
     address: z.string(),
-    fiscal_evidence_reference: z.string(),
+    fiscal_evidence_reference: z.string().nullable(),
   }),
 );
 export type Shipment = z.infer<typeof shipmentSchema>;

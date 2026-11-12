@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { createHash, randomUUID } from 'node:crypto';
 import { requirePipeline } from '@avito/domain';
+import { connectedSellerInn } from './warehouses.js';
 import type { Database } from './client.js';
 import type { PipelineProtection } from './marking-pipeline.js';
 export function createChzSessionStore(
@@ -16,7 +17,7 @@ export function createChzSessionStore(
           key_id: string;
           identity_hash: string;
         }>(
-          sql`SELECT * FROM chz_sessions WHERE expires_at>now()+interval '2 minutes' ORDER BY expires_at DESC LIMIT 1`,
+          sql`SELECT * FROM chz_sessions WHERE seller_inn=${connectedSellerInn} AND expires_at>now()+interval '2 minutes' ORDER BY expires_at DESC LIMIT 1`,
         )
       ).rows[0];
       return r
@@ -30,7 +31,7 @@ export function createChzSessionStore(
       return (
         (
           await db.execute<{ seller_inn: string }>(
-            sql`SELECT seller_inn FROM marking_pipeline_settings ORDER BY warehouse_id LIMIT 1`,
+            sql`SELECT ${connectedSellerInn} AS seller_inn`,
           )
         ).rows[0]?.seller_inn ?? null
       );
@@ -50,7 +51,7 @@ export function createChzSessionStore(
             signature_key_id: string | null;
             signature_identity_hash: string | null;
           }>(
-            sql`SELECT * FROM signer_jobs WHERE purpose='AUTH' AND status IN ('PENDING','LEASED','VERIFIED') AND expires_at>now() ORDER BY created_at DESC LIMIT 1`,
+            sql`SELECT * FROM signer_jobs WHERE purpose='AUTH' AND seller_inn=${connectedSellerInn} AND status IN ('PENDING','LEASED','VERIFIED') AND expires_at>now() ORDER BY created_at DESC LIMIT 1`,
           )
         ).rows[0] ?? null
       );
@@ -60,7 +61,7 @@ export function createChzSessionStore(
       const id = randomUUID(),
         encrypted = protection.encrypt(data, 'auth:' + id);
       await db.execute(
-        sql`INSERT INTO signer_jobs(id,purpose,document_type,seller_inn,auth_uuid,payload_ciphertext,encryption_key_id,identity_hash,payload_hash,expires_at) VALUES(${id},'AUTH','CHZ_AUTH',${inn},${uuid},${encrypted.payloadCiphertext},${encrypted.encryptionKeyId},${encrypted.identityHash},${createHash('sha256').update(data).digest('hex')},now()+interval '5 minutes')`,
+        sql`INSERT INTO signer_jobs(id,purpose,document_type,seller_inn,auth_uuid,payload_ciphertext,encryption_key_id,identity_hash,payload_hash,expires_at) SELECT ${id},'AUTH','CHZ_AUTH',${inn},${uuid},${encrypted.payloadCiphertext},${encrypted.encryptionKeyId},${encrypted.identityHash},${createHash('sha256').update(data).digest('hex')},now()+interval '5 minutes' WHERE ${connectedSellerInn}=${inn}`,
       );
     },
     signature(row: {

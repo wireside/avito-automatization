@@ -2583,7 +2583,7 @@
       "file": "true-api.openapi.json",
       "paths": 121,
       "operations": 122,
-      "typedSubsets": 11
+      "typedSubsets": 12
     },
     "true-api-deprecated": {
       "file": "true-api-deprecated.openapi.json",

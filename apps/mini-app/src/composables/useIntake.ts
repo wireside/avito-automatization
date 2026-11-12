@@ -6,6 +6,7 @@ import {
   type ScanInput,
   type ScanResult,
 } from '../inventory-api';
+import { useWarehouses } from './useWarehouses';
 import { layout } from '../design/tokens';
 
 export interface ReceiptEntry {
@@ -18,6 +19,7 @@ export function useIntake(
   focus: () => void,
 ) {
   const api = createInventoryApi(initData);
+  const { warehouseId } = useWarehouses(initData);
   const queryClient = useQueryClient();
   const raw = ref('');
   const queue = ref<ScanInput[]>([]);
@@ -100,6 +102,7 @@ export function useIntake(
   function enqueue(value: string, scannerProfile: ScanInput['scannerProfile']) {
     if (!value || inputDisabled.value || disposed) return;
     queue.value.push({
+      ...(warehouseId.value ? { warehouseId: warehouseId.value } : {}),
       requestId: crypto.randomUUID(),
       raw: value,
       scannerProfile,

@@ -8,6 +8,7 @@ import {
   requirePipeline,
   type PipelineStore,
 } from '@avito/domain';
+import { connectedSellerInn } from './warehouses.js';
 import type { Database } from './client.js';
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Row = Record<string, unknown>;
@@ -301,57 +302,7 @@ export function createMarkingPipelineStore(
           };
         }
         let result: Row = {};
-        if (action === 'configure') {
-          requirePipeline(
-            !(
-              await rows(
-                tx,
-                sql`SELECT id FROM signer_installations WHERE status='ACTIVE' AND seller_inn<>${String(input.sellerInn)}`,
-              )
-            ).length,
-            'SIGNATURE_INN_MISMATCH',
-          );
-          requirePipeline(
-            !(
-              await rows(
-                tx,
-                sql`SELECT warehouse_id FROM marking_pipeline_settings WHERE seller_inn<>${String(input.sellerInn)}`,
-              )
-            ).length,
-            'SELLER_ACCOUNT_MISMATCH',
-          );
-          const current = (
-            await rows(
-              tx,
-              sql`SELECT * FROM marking_pipeline_settings WHERE warehouse_id=${String(input.warehouseId)}`,
-            )
-          )[0];
-          if (
-            current &&
-            (current.seller_inn !== input.sellerInn ||
-              current.fias_id !== input.fiasId)
-          )
-            requirePipeline(
-              !(
-                await rows(
-                  tx,
-                  sql`SELECT sc.id FROM sale_cycles sc JOIN inventory_reservations r ON r.id=sc.reservation_id WHERE r.warehouse_id=${String(input.warehouseId)} AND sc.closed_at IS NULL`,
-                )
-              ).length,
-              'CONFIGURATION_IN_USE',
-            );
-          await tx.execute(
-            sql`INSERT INTO marking_pipeline_settings(warehouse_id,seller_inn,fias_id,address,fiscal_evidence_reference) VALUES(${String(input.warehouseId)},${String(input.sellerInn)},${String(input.fiasId)},${String(input.address)},${String(input.fiscalEvidenceReference)}) ON CONFLICT(warehouse_id) DO UPDATE SET seller_inn=excluded.seller_inn,fias_id=excluded.fias_id,address=excluded.address,fiscal_evidence_reference=excluded.fiscal_evidence_reference,updated_at=now()`,
-          );
-          for (const [code, name, kind] of [
-            ['PIPE_QUARANTINE', 'Возвратный карантин', 'QUARANTINE'],
-            ['PIPE_DEFECT', 'Брак', 'DEFECT'],
-          ])
-            await tx.execute(
-              sql`INSERT INTO stock_locations(warehouse_id,code,name,kind) VALUES(${String(input.warehouseId)},${code},${name},${kind}::stock_location_kind) ON CONFLICT(warehouse_id,code) DO NOTHING`,
-            );
-          result = { warehouseId: input.warehouseId };
-        } else if (action === 'calendar') {
+        if (action === 'calendar') {
           for (const day of arr(input, 'days'))
             await tx.execute(
               sql`INSERT INTO marking_business_days(date,working) VALUES(${String(day.date)},${day.working === true}) ON CONFLICT(date) DO UPDATE SET working=excluded.working`,
@@ -1113,7 +1064,7 @@ export function createMarkingPipelineStore(
       if (kind === 'integrations') {
         const state = await first(
           db,
-          sql`SELECT EXISTS(SELECT 1 FROM marking_pipeline_settings) AS seller_configured,EXISTS(SELECT 1 FROM chz_sessions WHERE expires_at>now()+interval '2 minutes') AS chz_authorized,EXISTS(SELECT 1 FROM signer_installations i WHERE i.status='ACTIVE' AND i.certificate_expires_at>now()) AS signer_registered,EXISTS(SELECT 1 FROM signer_devices sd WHERE sd.ready AND sd.last_seen_at>now()-interval '60 seconds' AND sd.certificate_expires_at>now() AND (${capabilities.signerConfigured} OR EXISTS(SELECT 1 FROM signer_installations i WHERE i.signer_id=sd.signer_id AND i.certificate_thumbprint=sd.certificate_thumbprint AND i.status='ACTIVE'))) AS signer_online,(SELECT max(last_seen_at) FROM signer_devices) AS signer_last_seen_at,(SELECT min(certificate_expires_at) FROM signer_devices) AS certificate_expires_at`,
+          sql`SELECT (${connectedSellerInn} IS NOT NULL) AS seller_configured,EXISTS(SELECT 1 FROM chz_sessions WHERE seller_inn=${connectedSellerInn} AND expires_at>now()+interval '2 minutes') AS chz_authorized,EXISTS(SELECT 1 FROM signer_installations i WHERE i.status='ACTIVE' AND i.certificate_expires_at>now()) AS signer_registered,EXISTS(SELECT 1 FROM signer_devices sd WHERE sd.ready AND sd.last_seen_at>now()-interval '60 seconds' AND sd.certificate_expires_at>now() AND (${capabilities.signerConfigured} OR EXISTS(SELECT 1 FROM signer_installations i WHERE i.signer_id=sd.signer_id AND i.certificate_thumbprint=sd.certificate_thumbprint AND i.status='ACTIVE'))) AS signer_online,(SELECT max(last_seen_at) FROM signer_devices) AS signer_last_seen_at,(SELECT min(certificate_expires_at) FROM signer_devices) AS certificate_expires_at`,
         );
         data = {
           ...capabilities,

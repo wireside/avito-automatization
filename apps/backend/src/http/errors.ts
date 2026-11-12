@@ -1,3 +1,4 @@
+import { PipelineError } from '@avito/domain';
 import type { ApiErrorCode, ApiErrorResponse } from '@avito/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
@@ -110,6 +111,11 @@ export function sendApiError(
 }
 export function registerHttpErrors(app: FastifyInstance) {
   app.setErrorHandler((error, request, reply) => {
+    if (
+      error instanceof PipelineError &&
+      error.code === 'WAREHOUSE_UNAVAILABLE'
+    )
+      return sendApiError(reply, request, 'WAREHOUSE_UNAVAILABLE');
     const transportCode =
       error instanceof Error && 'code' in error ? error.code : undefined;
     const code: ApiErrorCode =

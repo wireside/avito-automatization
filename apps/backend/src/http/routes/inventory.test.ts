@@ -233,7 +233,7 @@ describe('protected warehouse HTTP API', () => {
       items: [unit],
       hasMore: false,
     });
-    expect(units).toHaveBeenCalledWith(unit.variantId, 20);
+    expect(units).toHaveBeenCalledWith(unit.variantId, 20, undefined);
   });
   it('saves an authorized scan with a server-derived actor and unchanged original input', async () => {
     const { app, persist } = await setup();

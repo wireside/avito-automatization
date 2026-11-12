@@ -11,6 +11,7 @@ import ScanFeedback from './ScanFeedback.vue';
 import CameraScanner from './CameraScanner.vue';
 import ReceiptJournal from './ReceiptJournal.vue';
 import StockBrowser from './StockBrowser.vue';
+import WarehouseMenu from './WarehouseMenu.vue';
 import UnitList from './UnitList.vue';
 const props = defineProps<{
   initData: string;
@@ -119,7 +120,9 @@ watch(cameraOpen, (value) => {
             : 'Данные склада'
       }}</span>
     </div>
-    <header class="d-flex align-center justify-space-between ga-3 mb-4 mb-md-5">
+    <header
+      class="d-flex align-center justify-space-between flex-wrap ga-3 mb-4 mb-md-5"
+    >
       <div>
         <p class="text-label-small text-primary mb-1 d-md-none">SHTANISHKIN</p>
         <h1 id="warehouse-title" class="text-title-large">Склад</h1>
@@ -128,10 +131,12 @@ watch(cameraOpen, (value) => {
         </p>
       </div>
       <div class="d-flex align-center ga-3">
-        <span class="text-body-small text-secondary">{{
-          stock.data.value?.warehouse.name ?? 'Основной склад'
-        }}</span
-        ><v-btn
+        <WarehouseMenu
+          :init-data="initData"
+          :roles="roles"
+          :disabled="processing || queueLength > 0"
+        />
+        <v-btn
           :icon="mdiRefresh"
           size="36"
           variant="text"
@@ -304,9 +309,9 @@ watch(cameraOpen, (value) => {
           Приёмка» нажмите кнопку камеры и отсканируйте DataMatrix.
         </p>
         <p class="text-body-small text-secondary mt-4">
-          Товар сохранится на общем складе. Остатки на ноутбуке обновляются
-          автоматически каждые 15 секунд. Результат сканирования показывается на
-          телефоне.
+          Товар сохранится на выбранном складе. Перед сканированием проверьте
+          его название в меню. Остатки на ноутбуке обновляются автоматически
+          каждые 15 секунд. Результат сканирования показывается на телефоне.
         </p>
         <v-btn
           block

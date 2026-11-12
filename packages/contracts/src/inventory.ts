@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const inventoryScanRequestSchema = z
   .object({
+    warehouseId: z.uuid().optional(),
     requestId: z
       .uuid()
       .describe(
@@ -19,6 +20,7 @@ export const inventoryScanRequestSchema = z
   .strict();
 export const inventoryListQuerySchema = z
   .object({
+    warehouseId: z.uuid().optional(),
     search: z
       .string()
       .max(120)
@@ -31,7 +33,10 @@ export const inventoryListQuerySchema = z
   })
   .strict();
 export const inventoryUnitsQuerySchema = z
-  .object({ offset: z.coerce.number().int().min(0).max(1000000).default(0) })
+  .object({
+    warehouseId: z.uuid().optional(),
+    offset: z.coerce.number().int().min(0).max(1000000).default(0),
+  })
   .strict();
 export const inventoryVariantParamsSchema = z.object({ id: z.uuid() }).strict();
 const quantity = z.number().int().nonnegative();
@@ -51,6 +56,8 @@ export const inventoryVariantSchema = z.object({
   defective: quantity,
 });
 export const inventoryUnitSchema = z.object({
+  warehouseId: z.uuid().optional(),
+  warehouseName: z.string().optional(),
   id: z.uuid(),
   internalCode: z.string(),
   variantId: z.uuid(),

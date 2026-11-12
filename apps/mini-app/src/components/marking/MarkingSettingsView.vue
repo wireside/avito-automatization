@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import ChzConnectionPanel from './ChzConnectionPanel.vue';
+import WarehouseSettingsPanel from '../WarehouseSettingsPanel.vue';
 import IntegrationStatusBanner from './IntegrationStatusBanner.vue';
 import { computed, ref } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import {
-  settingsSchema,
   overviewSchema,
   type MarkingAction,
   signerInstallLinkResponse,
@@ -16,11 +17,6 @@ const props = defineProps<{
   roles: string[];
 }>();
 const api = createMarkingApi(props.initData);
-const settings = useQuery({
-  queryKey: ['marking', 'settings'],
-  queryFn: ({ signal }) => api.read('settings', settingsSchema, signal),
-  enabled: computed(() => props.active),
-});
 const overview = useQuery({
   queryKey: ['marking', 'overview'],
   queryFn: ({ signal }) => api.read('overview', overviewSchema, signal),
@@ -75,19 +71,9 @@ async function copyInstallLink() {
   }
 }
 const dialog = ref(false);
-const action = ref<MarkingAction>('configure');
-const defaults = ref<Record<string, string>>({});
-function open(value: MarkingAction, row?: Record<string, string>) {
+const action = ref<MarkingAction>('supply');
+function open(value: MarkingAction) {
   action.value = value;
-  defaults.value = row
-    ? {
-        warehouseId: row.warehouse_id!,
-        sellerInn: row.seller_inn!,
-        fiasId: row.fias_id!,
-        address: row.address!,
-        fiscalEvidenceReference: row.fiscal_evidence_reference!,
-      }
-    : {};
   dialog.value = true;
 }
 </script>
@@ -95,36 +81,11 @@ function open(value: MarkingAction, row?: Record<string, string>) {
   <section>
     <IntegrationStatusBanner :init-data="initData" />
     <h1 class="text-title-large mb-5">Настройки владельца</h1>
-    <v-alert v-if="settings.isError.value" type="error" class="mb-4"
-      >Не удалось загрузить настройки.<v-btn @click="settings.refetch()"
-        >Повторить</v-btn
-      ></v-alert
-    ><v-progress-linear v-if="settings.isPending.value" indeterminate /><v-row
-      ><v-col cols="12" md="7"
-        ><v-card class="pa-5 mb-4"
-          ><h2 class="text-title-medium mb-4">Реквизиты ИП и склада</h2>
-          <p
-            v-if="settings.data.value && !settings.data.value.data.length"
-            class="text-body-medium text-secondary"
-          >
-            Реквизиты ещё не заполнены.
-          </p>
-          <v-sheet
-            v-for="row in settings.data.value?.data"
-            :key="row.warehouse_id"
-            class="mb-4"
-            ><p>ИНН ИП: {{ row.seller_inn }}</p>
-            <p class="text-body-small text-secondary mt-2">{{ row.address }}</p>
-            <p class="text-body-small text-muted mt-2 text-break">
-              ФИАС: {{ row.fias_id }}
-            </p>
-            <v-btn class="mt-3" @click="open('configure', row)"
-              >Изменить реквизиты</v-btn
-            ></v-sheet
-          ><v-btn @click="open('configure')"
-            >Добавить реквизиты склада</v-btn
-          ></v-card
-        ><v-card class="pa-5"
+    <v-row
+      ><v-col cols="12" md="7">
+        <ChzConnectionPanel :init-data="initData" :active="active" />
+        <WarehouseSettingsPanel :init-data="initData" />
+        <v-card class="pa-5"
           ><h2 class="text-title-medium mb-4">Документы поставщика</h2>
           <p class="text-body-medium text-secondary mb-4">
             Укажите документ поставщика один раз для партии. Backend проверит
@@ -212,8 +173,7 @@ function open(value: MarkingAction, row?: Record<string, string>) {
       v-model="dialog"
       :action="action"
       :init-data="initData"
-      :defaults="defaults"
-      @done="settings.refetch()"
+      @done="overview.refetch()"
     />
   </section>
 </template>

@@ -7,10 +7,12 @@ import {
   uuid,
   unique,
   integer,
+  check,
 } from 'drizzle-orm/pg-core';
 import { chzDocuments } from './marking.js';
 import { users } from './foundation.js';
 import { productUnits, warehouses } from './stock.js';
+import { sql } from 'drizzle-orm';
 import { entityId } from './common.js';
 export const markingPipelineSettings = pgTable('marking_pipeline_settings', {
   warehouseId: uuid('warehouse_id')
@@ -19,7 +21,7 @@ export const markingPipelineSettings = pgTable('marking_pipeline_settings', {
   sellerInn: text('seller_inn').notNull(),
   fiasId: uuid('fias_id').notNull(),
   address: text('address').notNull(),
-  fiscalEvidenceReference: text('fiscal_evidence_reference').notNull(),
+  fiscalEvidenceReference: text('fiscal_evidence_reference'),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -180,3 +182,18 @@ export const signerInstallations = pgTable('signer_installations', {
     .notNull()
     .defaultNow(),
 });
+
+export const chzConnectionSettings = pgTable(
+  'chz_connection_settings',
+  {
+    id: integer('id').primaryKey().default(1),
+    sellerInn: text('seller_inn').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    check('chz_connection_singleton', sql`${t.id}=1`),
+    check('chz_connection_inn', sql`${t.sellerInn} ~ '^[0-9]{12}$'`),
+  ],
+);

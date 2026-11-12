@@ -11,16 +11,6 @@ const scan = {
   scannerProfile: z.enum(['camera-gs1-v1', 'keyboard-gs1-v1']),
 };
 export const markingRequests = {
-  configure: z
-    .object({
-      ...base,
-      sellerInn: z.string().regex(/^\d{12}$/),
-      warehouseId: id,
-      fiasId: id,
-      address: text,
-      fiscalEvidenceReference: text,
-    })
-    .strict(),
   calendar: z
     .object({
       ...base,

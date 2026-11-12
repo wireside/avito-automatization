@@ -81,7 +81,15 @@ const time = (value: string) =>
                 <p class="text-title-small">{{ entry.result.unit.name }}</p>
                 <ReceiptCatalogDetails :result="entry.result" />
                 <p class="text-label-small text-muted">
-                  {{ entry.result.unit.location ?? 'Зона приёмки' }} · 1 шт.
+                  {{
+                    [
+                      entry.result.unit.warehouseName,
+                      entry.result.unit.location ?? 'Зона приёмки',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  }}
+                  · 1 шт.
                 </p>
               </div>
             </div>
@@ -136,7 +144,15 @@ const time = (value: string) =>
           <p class="text-title-small">{{ entry.result.unit.name }}</p>
           <ReceiptCatalogDetails :result="entry.result" />
           <p class="text-body-small text-secondary">
-            1 шт. · {{ entry.result.unit.location ?? 'Зона приёмки' }}
+            1 шт. ·
+            {{
+              [
+                entry.result.unit.warehouseName,
+                entry.result.unit.location ?? 'Зона приёмки',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            }}
           </p>
           <p class="text-label-small text-success">
             {{

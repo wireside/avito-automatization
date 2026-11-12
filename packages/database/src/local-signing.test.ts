@@ -57,6 +57,9 @@ AlGio+Zxm+yT
       signer = createLocalSigningStore(db.db, protection, pin);
     afterAll(() => db.pool.end());
     it('leases exact AUTH bytes, pins the certificate, checks nonce and accepts only identical replay', async () => {
+      await db.db.execute(
+        sql`INSERT INTO chz_connection_settings(id,seller_inn) VALUES(1,'123456789012') ON CONFLICT(id) DO NOTHING`,
+      );
       await sessions.challenge(
         '123456789012',
         randomUUID(),

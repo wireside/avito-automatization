@@ -1,7 +1,6 @@
 import type { SessionUser } from '../auth/verify-telegram-session.js';
 
 export type PipelineAction =
-  | 'configure'
   | 'calendar'
   | 'supply'
   | 'check'
@@ -121,7 +120,6 @@ export function createMarkingPipeline(
       input: PipelineInput,
     ) {
       const privileged = [
-        'configure',
         'calendar',
         'supply',
         'dispose',

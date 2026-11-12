@@ -95,6 +95,32 @@ async function setup(
       },
     }),
   );
+  await page.route('**/api/v1/warehouses', (r) =>
+    r.fulfill({
+      json: {
+        ok: true,
+        items: [
+          {
+            id: uuid(30),
+            name: 'Основной склад',
+            isDefault: true,
+            address: null,
+            configured: true,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route('**/api/v1/chz/connection', (r) =>
+    r.fulfill({
+      json: {
+        ok: true,
+        sellerInn: '123456789012',
+        signerActive: true,
+        authorized: false,
+      },
+    }),
+  );
   await page.route('**/api/v1/marking/**', async (r) => {
     const path = new URL(r.request().url()).pathname.split('/marking/')[1]!;
     if (r.request().method() === 'POST') {
@@ -308,44 +334,28 @@ test('return requests payment evidence only for paid returns', async ({
   ).toBeUndefined();
 });
 
-test('settings submit contract fields and viewer has no export', async ({
+test('settings separate CHZ connection from warehouses and hide internal fields', async ({
   page,
 }) => {
-  const requests = await setup(page);
+  await setup(page);
   await page
     .getByRole('navigation', { name: 'Основная навигация' })
     .getByText('Настройки', { exact: true })
     .click();
   await expect(
-    page.getByText('Состояние подключения показано выше', { exact: true }),
+    page.getByText('Подключение Честного знака', { exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole('button', { name: 'Добавить реквизиты склада', exact: true })
-    .click();
-  for (const [label, value] of [
-    ['ИНН ИП · 12 цифр', '123456789012'],
-    ['Идентификатор склада', uuid(30)],
-    ['ФИАС', uuid(31)],
-    ['Адрес склада', 'Тестовый адрес склада'],
-    ['Подтверждение кассовой / договорной схемы', 'test-contract-reference'],
-  ])
-    await page.getByLabel(label!, { exact: true }).fill(value!);
-  await page.getByRole('button', { name: 'Подтвердить', exact: true }).click();
-  await expect
-    .poll(() => requests.some((r) => r.action === 'configure'))
-    .toBe(true);
-  expect(
-    Object.keys(requests.find((r) => r.action === 'configure')!.body).sort(),
-  ).toEqual(
-    [
-      'requestId',
-      'sellerInn',
-      'warehouseId',
-      'fiasId',
-      'address',
-      'fiscalEvidenceReference',
-    ].sort(),
-  );
+  await expect(
+    page.getByText('Склады и адреса отгрузки', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel('Идентификатор склада', { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel('Подтверждение кассовой / договорной схемы', {
+      exact: true,
+    }),
+  ).toHaveCount(0);
 });
 
 test('legal details are loaded only after expanding a unit', async ({

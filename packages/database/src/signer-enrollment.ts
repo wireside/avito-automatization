@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { connectedSellerInn } from './warehouses.js';
 import { sql } from 'drizzle-orm';
 import {
   requirePipeline,
@@ -104,11 +105,11 @@ export function createSignerEnrollmentStore(
         }
         const configured = (
           await tx.execute<{ seller_inn: string }>(
-            sql`SELECT seller_inn FROM marking_pipeline_settings LIMIT 1`,
+            sql`SELECT ${connectedSellerInn} AS seller_inn`,
           )
         ).rows[0];
         requirePipeline(
-          !configured || configured.seller_inn === input.sellerInn,
+          !configured?.seller_inn || configured.seller_inn === input.sellerInn,
           'SIGNATURE_INN_MISMATCH',
         );
         const id = randomUUID();
@@ -152,11 +153,11 @@ export function createSignerEnrollmentStore(
           );
           const cfg = (
             await tx.execute<{ seller_inn: string }>(
-              sql`SELECT seller_inn FROM marking_pipeline_settings LIMIT 1`,
+              sql`SELECT ${connectedSellerInn} AS seller_inn`,
             )
           ).rows[0];
           requirePipeline(
-            !cfg || cfg.seller_inn === d.seller_inn,
+            !cfg?.seller_inn || cfg.seller_inn === d.seller_inn,
             'SIGNATURE_INN_MISMATCH',
           );
           await tx.execute(

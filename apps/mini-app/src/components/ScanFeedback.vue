@@ -57,6 +57,9 @@ const duplicate = computed(() => props.result?.outcome === 'DUPLICATE');
           : `${result.unit.location ?? 'Склад'} · добавлен на склад`
       }}
     </p>
+    <p v-if="result.unit.warehouseName" class="text-label-small text-secondary">
+      {{ result.unit.warehouseName }}
+    </p>
     <p class="text-label-small text-secondary">{{ result.unit.maskedCode }}</p>
     <p v-if="processing" class="text-label-small text-secondary mt-2">
       Добавляем следующий товар… В очереди: {{ queueLength }}

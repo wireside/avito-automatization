@@ -8,3 +8,5 @@ export * from './signing.js';
 export * from './marking-views.js';
 
 export * from './order-actions.js';
+
+export * from './warehouses.js';

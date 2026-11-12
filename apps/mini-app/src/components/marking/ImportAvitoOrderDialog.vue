@@ -9,6 +9,7 @@ import {
   inventoryPageResponseSchema,
   type InventoryPageResponse,
 } from '@avito/contracts';
+import { useWarehouses } from '../../composables/useWarehouses';
 import type { MarketplaceOrderDto } from '../../orders-api';
 import {
   createMarkingApi,
@@ -18,6 +19,9 @@ import {
 const open = defineModel<boolean>({ required: true });
 const props = defineProps<{ initData: string; order: MarketplaceOrderDto }>();
 const emit = defineEmits<{ done: [] }>();
+const { warehouses, warehouseId, selected, select } = useWarehouses(
+  props.initData,
+);
 const client = useQueryClient(),
   busy = ref(false),
   error = ref(''),
@@ -27,17 +31,17 @@ const stock = useInfiniteQuery<
   InventoryPageResponse,
   Error,
   InfiniteData<InventoryPageResponse>,
-  string[],
+  readonly (string | undefined)[],
   number
 >({
-  queryKey: ['inventory', 'mapping-options'],
+  queryKey: computed(() => ['inventory', 'mapping-options', warehouseId.value]),
   enabled: computed(() => open.value),
   initialPageParam: 0,
   getNextPageParam: (last, pages) =>
     last.hasMore ? pages.length * 100 : undefined,
   queryFn: async ({ pageParam, signal }) => {
     const r = await fetch(
-      `${import.meta.env.VITE_API_BASE_URL ?? ''}/api/v1/inventory?limit=100&offset=${pageParam}`,
+      `${import.meta.env.VITE_API_BASE_URL ?? ''}/api/v1/inventory?limit=100&offset=${pageParam}${warehouseId.value ? '&warehouseId=' + warehouseId.value : ''}`,
       {
         headers: { authorization: `tma ${props.initData}` },
         cache: 'no-store',
@@ -64,6 +68,10 @@ watch(open, (v) => {
     requestId.value = crypto.randomUUID();
   }
 });
+watch(warehouseId, () => {
+  selection.value = {};
+  requestId.value = crypto.randomUUID();
+});
 watch(
   selection,
   () => {
@@ -78,6 +86,7 @@ async function submit() {
     await createMarkingApi(props.initData).command('importOrder', {
       requestId: requestId.value,
       externalOrderId: props.order.id,
+      ...(warehouseId.value ? { warehouseId: warehouseId.value } : {}),
       mappings: Object.entries(selection.value)
         .filter(([, v]) => !!v)
         .map(([externalItemId, variantId]) => ({ externalItemId, variantId })),
@@ -104,6 +113,22 @@ async function submit() {
         подтверждение заказа в Авито. Состав будет проверен в Авито. Если
         объявление уже сопоставлено со складом, выбирать вариант повторно не
         нужно.
+      </p>
+      <v-select
+        class="mt-4"
+        :model-value="warehouseId"
+        :items="warehouses.data.value?.items ?? []"
+        item-title="name"
+        item-value="id"
+        label="Склад отгрузки"
+        :disabled="busy"
+        @update:model-value="$event && select($event)"
+      />
+      <p
+        v-if="selected && !selected.configured"
+        class="text-body-small text-warning"
+      >
+        Сначала настройте адрес отгрузки этого склада в настройках.
       </p>
       <v-alert v-if="error" type="warning" class="my-4">{{ error }}</v-alert>
       <div v-for="item in order.items" :key="item.avitoId" class="mt-4">
@@ -134,6 +159,7 @@ async function submit() {
         ></v-alert
       ><v-btn
         :loading="busy"
+        :disabled="selected ? !selected.configured : false"
         color="primary-strong"
         class="mt-4"
         @click="submit"

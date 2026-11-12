@@ -16,6 +16,7 @@ export function createChzAuthorization(
     if (!inn) return;
     const job = await store.pending();
     if (job) {
+      if (job.seller_inn !== inn) return;
       if (job.status === 'VERIFIED') {
         const signature = store.signature(job);
         const session = await client.authenticate(

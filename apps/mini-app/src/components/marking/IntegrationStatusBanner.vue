@@ -18,7 +18,7 @@ const problems = computed(() => {
   const d = status.data.value?.data;
   if (!d) return [];
   return [
-    !d.seller_configured ? 'Не заполнены реквизиты ИП и склада' : null,
+    !d.seller_configured ? 'Не подключён ИП к Честному знаку' : null,
     !d.avitoConfigured ? 'Не настроен доступ к Авито' : null,
     !d.signerConfigured
       ? 'Не настроен сертификат локального подписанта'

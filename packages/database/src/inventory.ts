@@ -9,7 +9,7 @@ import type {
   InventoryVariant,
 } from '@avito/domain';
 import type { Database } from './client.js';
-import { canEnrichIntakeVariant } from '@avito/domain';
+import { canEnrichIntakeVariant, requirePipeline } from '@avito/domain';
 import {
   costLayers,
   catalogAttributeSources,
@@ -30,13 +30,15 @@ const unitSelect = sql`SELECT u.id, u.internal_code AS "internalCode", u.variant
  coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
  v.color, v.size_label AS size, v.size_system AS "sizeSystem",
  m.masked_code AS "maskedCode", u.current_state AS state, l.name AS location,
+ coalesce(l.warehouse_id,r.warehouse_id) AS "warehouseId", uw.name AS "warehouseName",
  r.id AS "receiptId", r.number AS "receiptNumber", r.received_at AS "receivedAt"
  FROM product_units u JOIN product_variants v ON v.id=u.variant_id
  LEFT JOIN products p ON p.id=v.product_id
  JOIN cost_layers c ON c.id=u.cost_layer_id JOIN stock_receipt_items ri ON ri.id=c.receipt_item_id
  JOIN stock_receipts r ON r.id=ri.receipt_id
  JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL
- LEFT JOIN stock_locations l ON l.id=u.current_location_id`;
+ LEFT JOIN stock_locations l ON l.id=u.current_location_id
+ JOIN warehouses uw ON uw.id=coalesce(l.warehouse_id,r.warehouse_id)`;
 type UnitRow = Omit<InventoryUnit, 'receivedAt'> & { receivedAt: string };
 const mapUnit = (row: UnitRow): InventoryUnit => ({
   ...row,
@@ -190,6 +192,13 @@ export function createInventoryStore(db: Database) {
           .from(inventoryScans)
           .where(eq(inventoryScans.idempotencyKey, key));
         if (replay) {
+          const target = (
+            await tx.execute<{ matches: boolean }>(
+              sql`SELECT (CASE WHEN ${command.warehouseId ?? null}::uuid IS NULL THEN w.code='MAIN' ELSE w.id=${command.warehouseId ?? null}::uuid END) AS matches FROM stock_receipts r JOIN warehouses w ON w.id=r.warehouse_id WHERE r.id=${replay.receiptId}`,
+            )
+          ).rows[0];
+          if (!target?.matches)
+            return { ok: false, code: 'IDEMPOTENCY_CONFLICT' };
           if (
             replay.inputFingerprint !== command.inputFingerprint ||
             replay.scannerProfile !== command.scannerProfile
@@ -275,7 +284,9 @@ export function createInventoryStore(db: Database) {
           )
           .where(
             and(
-              eq(warehouses.code, 'MAIN'),
+              command.warehouseId
+                ? eq(warehouses.id, command.warehouseId)
+                : eq(warehouses.code, 'MAIN'),
               isNull(warehouses.archivedAt),
               eq(stockLocations.code, 'STOCK'),
               eq(stockLocations.kind, 'SELLABLE'),
@@ -424,12 +435,20 @@ export function createInventoryStore(db: Database) {
       // A consistent snapshot keeps totals, variant counts and pagination in agreement.
       return db.transaction(
         async (tx) => {
-          const warehouse = one(
+          const warehouse = (
             await tx
               .select({ id: warehouses.id, name: warehouses.name })
               .from(warehouses)
-              .where(eq(warehouses.code, 'MAIN')),
-          );
+              .where(
+                and(
+                  query.warehouseId
+                    ? eq(warehouses.id, query.warehouseId)
+                    : eq(warehouses.code, 'MAIN'),
+                  isNull(warehouses.archivedAt),
+                ),
+              )
+          )[0];
+          requirePipeline(warehouse, 'WAREHOUSE_UNAVAILABLE');
           const totals = one(
             (
               await tx.execute<{
@@ -465,10 +484,10 @@ export function createInventoryStore(db: Database) {
         { isolationLevel: 'repeatable read', accessMode: 'read only' },
       );
     },
-    async units(variantId: string, offset: number) {
+    async units(variantId: string, offset: number, warehouseId?: string) {
       const rows = (
         await db.execute<UnitRow>(
-          sql`${unitSelect} JOIN warehouses w ON w.id=l.warehouse_id WHERE u.variant_id=${variantId} AND w.code='MAIN' ORDER BY r.received_at DESC,u.id LIMIT 21 OFFSET ${offset}`,
+          sql`${unitSelect} JOIN warehouses w ON w.id=l.warehouse_id WHERE u.variant_id=${variantId} AND (${warehouseId ?? null}::uuid IS NOT NULL AND w.id=${warehouseId ?? null}::uuid OR ${warehouseId ?? null}::uuid IS NULL AND w.code='MAIN') AND w.archived_at IS NULL ORDER BY r.received_at DESC,u.id LIMIT 21 OFFSET ${offset}`,
         )
       ).rows;
       return {

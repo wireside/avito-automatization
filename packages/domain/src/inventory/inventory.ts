@@ -3,6 +3,7 @@ import { parseClothingMarking, type ScannerProfile } from './parse-marking.js';
 import type { CatalogLookupResult, ReceiptCatalog } from './receipt-catalog.js';
 
 export interface InventoryQuery {
+  warehouseId?: string | undefined;
   search: string;
   offset: number;
   limit: number;
@@ -29,6 +30,8 @@ export interface InventoryPage {
   hasMore: boolean;
 }
 export interface InventoryUnit {
+  warehouseId?: string;
+  warehouseName?: string;
   id: string;
   internalCode: string;
   variantId: string;
@@ -45,6 +48,7 @@ export interface InventoryUnit {
   receivedAt: string;
 }
 export interface ReceiptCommand {
+  warehouseId?: string | undefined;
   actorUserId: string;
   requestId: string;
   gtin: string;
@@ -107,7 +111,12 @@ export function createReceiveStock(deps: {
 }) {
   return async (
     user: SessionUser,
-    input: { requestId: string; raw: string; scannerProfile: ScannerProfile },
+    input: {
+      requestId: string;
+      raw: string;
+      scannerProfile: ScannerProfile;
+      warehouseId?: string | undefined;
+    },
   ): Promise<ReceiptResult | InventoryFailure> => {
     if (!canReceiveStock(user.roles)) return { ok: false, code: 'FORBIDDEN' };
     const parsed = parseClothingMarking(input.raw, input.scannerProfile);
@@ -133,6 +142,7 @@ export function createReceiveStock(deps: {
     )
       catalog = { status: 'NOT_FOUND' };
     const result = await deps.receive({
+      ...(input.warehouseId ? { warehouseId: input.warehouseId } : {}),
       actorUserId: user.id,
       requestId: input.requestId,
       gtin,
@@ -165,6 +175,7 @@ export function createReadInventory(deps: {
   units: (
     variantId: string,
     offset: number,
+    warehouseId?: string,
   ) => Promise<{ items: InventoryUnit[]; hasMore: boolean }>;
 }) {
   return {
@@ -172,9 +183,17 @@ export function createReadInventory(deps: {
       canReadStock(user.roles)
         ? { ok: true as const, ...(await deps.list(query)) }
         : { ok: false as const, code: 'FORBIDDEN' as const },
-    units: async (user: SessionUser, variantId: string, offset: number) =>
+    units: async (
+      user: SessionUser,
+      variantId: string,
+      offset: number,
+      warehouseId?: string,
+    ) =>
       canReadStock(user.roles)
-        ? { ok: true as const, ...(await deps.units(variantId, offset)) }
+        ? {
+            ok: true as const,
+            ...(await deps.units(variantId, offset, warehouseId)),
+          }
         : { ok: false as const, code: 'FORBIDDEN' as const },
   };
 }

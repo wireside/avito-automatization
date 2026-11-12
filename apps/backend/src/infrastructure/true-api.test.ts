@@ -166,3 +166,87 @@ it('reads the complete structured UPD across provider pages', async () => {
   ).toBe(true);
   expect(fetcher.mock.calls[1]![0]).toContain('pageNumber=2');
 });
+
+it('loads paginated clothing places with token authorization while document sending is disabled', async () => {
+  const fiasId = '00000000-0000-4000-8000-000000000001';
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      response({
+        result: [
+          {
+            inn: '123456789012',
+            productGroups: ['lp'],
+            fiasId,
+            address: 'Адрес из ЧЗ',
+          },
+        ],
+        total: 2,
+        nextPage: true,
+      }),
+    )
+    .mockResolvedValueOnce(
+      response({
+        result: [{ inn: '123456789012', productGroups: ['lp'] }],
+        total: 2,
+        nextPage: false,
+      }),
+    );
+  const api = createTrueApiClient({
+    session: {
+      getToken: () => Promise.resolve('token'),
+      invalidate: () => Promise.resolve(),
+    },
+    fetch: fetcher,
+    submissionsEnabled: false,
+  });
+  expect(await api.places('123456789012')).toEqual({
+    items: [{ fiasId, address: 'Адрес из ЧЗ' }],
+    incompleteCount: 1,
+  });
+  const urls = fetcher.mock.calls.map(
+    ([url]) =>
+      new URL(
+        typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
+      ),
+  );
+  expect(urls[0]!.pathname).toBe('/api/v3/true-api/mods/list');
+  expect(urls[0]!.searchParams.get('productGroups')).toBe('lp');
+  expect(urls[0]!.searchParams.get('inns')).toBe('123456789012');
+  expect(urls[1]!.searchParams.get('page')).toBe('1');
+  expect(fetcher.mock.calls[0]![1]!.headers).toMatchObject({
+    authorization: 'Bearer token',
+  });
+});
+it('rejects mismatched identities, wrong product groups, changed pagination and malformed places', async () => {
+  for (const result of [
+    {
+      result: [{ inn: '999999999999', productGroups: ['lp'] }],
+      total: 1,
+      nextPage: false,
+    },
+    {
+      result: [{ inn: '123456789012', productGroups: ['beer'] }],
+      total: 1,
+      nextPage: false,
+    },
+    { result: [], total: 1, nextPage: true },
+    { result: [], total: 1, nextPage: false },
+    {
+      result: [
+        { inn: '123456789012', productGroups: ['lp'], fiasId: 'not-a-guid' },
+      ],
+      total: 1,
+      nextPage: false,
+    },
+  ]) {
+    const api = createTrueApiClient({
+      session: {
+        getToken: () => Promise.resolve('token'),
+        invalidate: () => Promise.resolve(),
+      },
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(response(result)),
+    });
+    await expect(api.places('123456789012')).rejects.toThrow();
+  }
+});

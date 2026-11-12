@@ -65,7 +65,7 @@ describe('warehouse legal policy', () => {
     ).rejects.toThrow('FORBIDDEN');
     await createMarkingPipeline(store).command(
       { ...user, roles: ['OWNER'] },
-      'configure',
+      'calendar',
       { requestId: 'r' },
     );
     expect(store.execute).toHaveBeenCalledOnce();
