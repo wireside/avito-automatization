@@ -6,7 +6,7 @@ function Get-SignerInn([string]$Subject) {
 }
 function Get-AgentArguments([string]$Directory,[string]$ConfigPath) {
  $script=Join-Path $Directory 'agent.ps1'
- return "-NoProfile -ExecutionPolicy RemoteSigned -File `"$script`" -ConfigPath `"$ConfigPath`""
+ return "-NoProfile -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File `"$script`" -ConfigPath `"$ConfigPath`""
 }
 function Assert-SigningTask($Task,[string]$SellerInn) {
  if($Task.sellerInn -ne $SellerInn -or [DateTimeOffset]$Task.expiresAt -le [DateTimeOffset]::UtcNow){throw 'TASK_POLICY_REJECTED'}

@@ -8,6 +8,7 @@ foreach($subject in @('CN=INN=123456789012','INN=1234567890','INN=1234567890123'
 $dir=Join-Path ([IO.Path]::GetTempPath()) 'Владелец ИП/Подписант с пробелом'
 $config=Join-Path $dir 'config.json'
 $argsText=Get-AgentArguments $dir $config
+Assert ($argsText -match '^-NoProfile -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File ') 'Scheduled launch hides the console before script arguments'
 Assert ($argsText.Contains(('"'+(Join-Path $dir 'agent.ps1')+'"'))) 'Quoted script path'
 Assert ($argsText.Contains(('"'+$config+'"'))) 'Quoted config path'
 function Task([string]$Payload,[string]$Purpose='DOCUMENT',[string]$Type='LK_RECEIPT'){
