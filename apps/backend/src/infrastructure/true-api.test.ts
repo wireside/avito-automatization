@@ -1,3 +1,6 @@
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { ProxyAgent } from 'undici';
 import { it, expect, vi } from 'vitest';
 import { createTrueApiClient } from './true-api.js';
 const response = (body: unknown, status = 200) =>
@@ -248,5 +251,98 @@ it('rejects mismatched identities, wrong product groups, changed pagination and 
       fetch: vi.fn<typeof fetch>().mockResolvedValue(response(result)),
     });
     await expect(api.places('123456789012')).rejects.toThrow();
+  }
+});
+
+it('keeps direct requests free of a proxy dispatcher', async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(response({ uuid: 'id', data: 'challenge' }));
+  const api = createTrueApiClient({
+    session: {
+      getToken: () => Promise.resolve(null),
+      invalidate: async () => {},
+    },
+    fetch: fetcher,
+  });
+  await api.challenge();
+  expect(fetcher.mock.calls[0]![1]).not.toHaveProperty('dispatcher');
+  await api.close();
+});
+
+it('uses one client-owned dispatcher for authorization and API reads, then closes it', async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(response({ uuid: 'id', data: 'challenge' }))
+    .mockResolvedValueOnce(response({ token: 'test-session' }))
+    .mockResolvedValueOnce(response({ result: [], total: 0, nextPage: false }));
+  const api = createTrueApiClient({
+    session: {
+      getToken: () => Promise.resolve('test-session'),
+      invalidate: async () => {},
+    },
+    proxyUrl: 'http://127.0.0.1:3128',
+    fetch: fetcher,
+  });
+  try {
+    await api.challenge();
+    await api.authenticate('id', 'test-cms', '123456789012');
+    await api.places('123456789012');
+    const init = fetcher.mock.calls[0]![1] as RequestInit & {
+      dispatcher: ProxyAgent;
+    };
+    expect(init.dispatcher).toBeInstanceOf(ProxyAgent);
+    for (const [, options] of fetcher.mock.calls)
+      expect(options).toHaveProperty('dispatcher', init.dispatcher);
+    const closed = vi.spyOn(init.dispatcher, 'close');
+    await api.close();
+    expect(closed).toHaveBeenCalled();
+    expect(api.close()).toBe(api.close());
+  } finally {
+    await api.close();
+  }
+});
+
+it('uses a real CONNECT proxy and reports its denial without a direct fallback', async () => {
+  const targets: string[] = [];
+  const proxy = createServer();
+  proxy.on('connect', (request, socket) => {
+    targets.push(request.url ?? '');
+    socket.end(
+      'HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n',
+    );
+  });
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  const address = proxy.address();
+  if (!address || typeof address === 'string')
+    throw new Error('Expected TCP proxy');
+  const api = createTrueApiClient({
+    session: {
+      getToken: () => Promise.resolve('test-session'),
+      invalidate: async () => {},
+    },
+    proxyUrl: `http://127.0.0.1:${address.port}`,
+    submissionsEnabled: true,
+  });
+  try {
+    await expect(api.challenge()).rejects.toThrow('CHZ_UNAVAILABLE');
+    // A document request must also stay on the proxy and retain unknown-result semantics.
+    await expect(
+      api.submit({
+        type: 'LK_RECEIPT',
+        payloadBase64: 'e30=',
+        signatureBase64: 'test-cms',
+      }),
+    ).rejects.toThrow('SUBMISSION_RESULT_UNKNOWN');
+    expect(targets).toEqual([
+      'markirovka.crpt.ru:443',
+      'markirovka.crpt.ru:443',
+    ]);
+  } finally {
+    await api.close();
+    await new Promise<void>((resolve, reject) =>
+      proxy.close((error) => (error ? reject(error) : resolve())),
+    );
   }
 });

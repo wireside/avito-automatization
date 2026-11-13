@@ -81,6 +81,9 @@ export async function createApiRuntime(config: AppConfig) {
       }
     : undefined;
   const placesClient = createTrueApiClient({
+    ...(config.CHZ_PROXY_ENABLED && config.CHZ_PROXY_URL
+      ? { proxyUrl: config.CHZ_PROXY_URL }
+      : {}),
     session: createChzSessionStore(database.db, protection),
   });
   const bot =
@@ -293,7 +296,11 @@ export async function createApiRuntime(config: AppConfig) {
       closing ??= (async () => {
         if (pollingStarted) bot?.stop('shutdown');
         await app.close();
-        await Promise.all([database.pool.end(), redis.quit()]);
+        await Promise.all([
+          database.pool.end(),
+          redis.quit(),
+          placesClient.close(),
+        ]);
       })();
       return closing;
     },

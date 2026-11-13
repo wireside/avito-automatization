@@ -85,6 +85,9 @@ export function createWorkerRuntime(config: AppConfig) {
   );
   const sessions = createChzSessionStore(database.db, protection);
   const legal = createTrueApiClient({
+    ...(config.CHZ_PROXY_ENABLED && config.CHZ_PROXY_URL
+      ? { proxyUrl: config.CHZ_PROXY_URL }
+      : {}),
     session: sessions,
     submissionsEnabled: config.CHZ_DOCUMENT_SUBMISSION_ENABLED,
   });
@@ -240,6 +243,7 @@ export function createWorkerRuntime(config: AppConfig) {
           queueConnection.quit(),
           workerConnection.quit(),
           database.pool.end(),
+          legal.close(),
         ]);
       })();
       return closing;

@@ -98,3 +98,42 @@ it('requires a public HTTPS API and encryption for Telegram installation', () =>
     }),
   ).toThrow();
 });
+
+describe('CHZ proxy configuration', () => {
+  it('is disabled by default and permits a stored URL while disabled', () => {
+    expect(readConfig(base).CHZ_PROXY_ENABLED).toBe(false);
+    expect(
+      readConfig({ ...base, CHZ_PROXY_URL: '' }).CHZ_PROXY_URL,
+    ).toBeUndefined();
+    expect(
+      readConfig({ ...base, CHZ_PROXY_URL: 'http://proxy.example:3128' }),
+    ).toMatchObject({
+      CHZ_PROXY_ENABLED: false,
+      CHZ_PROXY_URL: 'http://proxy.example:3128',
+    });
+  });
+  it('requires an explicit URL when enabled', () => {
+    expect(() => readConfig({ ...base, CHZ_PROXY_ENABLED: 'true' })).toThrow(
+      'CHZ_PROXY_ENABLED requires CHZ_PROXY_URL',
+    );
+    expect(
+      readConfig({
+        ...base,
+        CHZ_PROXY_ENABLED: 'true',
+        CHZ_PROXY_URL: 'http://proxy.example:3128',
+      }).CHZ_PROXY_ENABLED,
+    ).toBe(true);
+    expect(() => readConfig({ ...base, CHZ_PROXY_ENABLED: 'yes' })).toThrow();
+  });
+  it.each([
+    'socks5://proxy.example:1080',
+    'http://user:secret@proxy.example:3128',
+    'http://proxy.example:3128/path',
+    'http://proxy.example:3128?secret=value',
+    'http://proxy.example:3128#fragment',
+  ])('rejects unsupported proxy origins: %s', (url) => {
+    expect(() =>
+      readConfig({ ...base, CHZ_PROXY_ENABLED: 'true', CHZ_PROXY_URL: url }),
+    ).toThrow();
+  });
+});

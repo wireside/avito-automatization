@@ -1,3 +1,4 @@
+import { fetch as proxyFetch, ProxyAgent, type Dispatcher } from 'undici';
 import { z } from 'zod';
 import {
   ProviderError,
@@ -18,12 +19,28 @@ export interface ChzSessionAccess {
   getToken(): Promise<string | null>;
   invalidate(): Promise<void>;
 }
+type TrueApiRequest = {
+  method: string;
+  headers: Record<string, string>;
+  body?: string;
+  signal: AbortSignal;
+};
+type TrueApiFetch = (
+  url: string,
+  init: TrueApiRequest,
+) => Promise<Pick<Response, 'ok' | 'status' | 'text'>>;
+
 export function createTrueApiClient(options: {
   session: ChzSessionAccess;
-  fetch?: typeof fetch;
+  fetch?: TrueApiFetch;
+  proxyUrl?: string;
   submissionsEnabled?: boolean;
 }) {
-  const fetcher = options.fetch ?? fetch;
+  // A dispatcher belongs to this client only; never change global fetch routing.
+  const proxy = options.proxyUrl ? new ProxyAgent(options.proxyUrl) : undefined;
+  // Keep ProxyAgent and its fetch implementation on the same Undici version.
+  const fetcher: TrueApiFetch = options.fetch ?? (proxy ? proxyFetch : fetch);
+  let closing: Promise<void> | undefined;
   async function request(
     path: string,
     body?: unknown,
@@ -34,9 +51,10 @@ export function createTrueApiClient(options: {
       throw new ProviderError('DOCUMENT_SUBMISSION_DISABLED');
     const auth = authorized ? await options.session.getToken() : null;
     if (authorized && !auth) throw new ProviderError('CHZ_AUTH_REQUIRED', true);
-    let response: Response;
+    let response: Pick<Response, 'ok' | 'status' | 'text'>;
     try {
-      response = await fetcher('https://markirovka.crpt.ru' + path, {
+      const init: TrueApiRequest & { dispatcher?: Dispatcher } = {
+        ...(proxy ? { dispatcher: proxy } : {}),
         method: body === undefined ? 'GET' : 'POST',
         headers: {
           accept: 'application/json',
@@ -45,7 +63,8 @@ export function createTrueApiClient(options: {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(15000),
-      });
+      };
+      response = await fetcher('https://markirovka.crpt.ru' + path, init);
     } catch {
       throw new ProviderError(
         mutation ? 'SUBMISSION_RESULT_UNKNOWN' : 'CHZ_UNAVAILABLE',
@@ -231,6 +250,10 @@ export function createTrueApiClient(options: {
     },
   };
   return {
+    close() {
+      closing ??= proxy ? proxy.close() : Promise.resolve();
+      return closing;
+    },
     ...client,
     async places(inn: string) {
       const entry = z.object({
