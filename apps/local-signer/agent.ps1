@@ -45,45 +45,70 @@ function Check-Chain($Cert){
 }
 while($true){
  $cert=$null
+ $stage='CERTIFICATE'
  try{
   $cert=Get-Certificate
+  $stage='CERTIFICATE_CHAIN'
   Check-Chain $cert
+  $stage='HEARTBEAT'
   $null=Call-Backend 'heartbeat' @{signerId=$cfg.SignerId;certificateThumbprint=$cfg.CertificateThumbprint;certificateExpiresAt=([DateTime](Get-SignerComProperty $cert 'ValidToDate')).ToUniversalTime().ToString('o');ready=$true}
+  $stage='CLAIM'
   $reply=Call-Backend 'claim' @{signerId=$cfg.SignerId}
   if($null -eq $reply.task){Start-Sleep -Seconds 5;continue}
   $task=$reply.task
+  $stage='TASK_POLICY'
   Assert-SigningTask $task $cfg.SellerInn
+  $stage='CREATE_SIGNER'
   $signer=New-Object -ComObject CAdESCOM.CPSigner
+  $stage='SET_SIGNER_CERTIFICATE'
   Set-SignerComProperty $signer 'Certificate' $cert
+  $stage='SET_SIGNER_CHECK'
   Set-SignerComProperty $signer 'CheckCertificate' $true
+  $stage='SET_SIGNER_OPTIONS'
   Set-SignerComProperty $signer 'Options' 1
+  $stage='CREATE_DATA'
   $data=New-Object -ComObject CAdESCOM.CadesSignedData
+  $stage='SET_CONTENT_ENCODING'
   Set-SignerComProperty $data 'ContentEncoding' 1
+  $stage='SET_CONTENT'
   Set-SignerComProperty $data 'Content' $task.payloadBase64
   $detached=$task.purpose -eq 'DOCUMENT'
-  $signature=Invoke-SignerComMethod $data 'SignCades' @($signer,1,$detached,0)
+  $stage='MARSHAL_SIGNER'
+  $dispatchSigner=ConvertTo-SignerDispatchArgument $signer
+  $stage='SIGN'
+  $signature=Invoke-SignerComMethod $data 'SignCades' @($dispatchSigner,1,$detached,0)
+  $stage='CREATE_VERIFIER'
   $verifier=New-Object -ComObject CAdESCOM.CadesSignedData
+  $stage='SET_VERIFY_ENCODING'
   Set-SignerComProperty $verifier 'ContentEncoding' 1
+  $stage='SET_VERIFY_CONTENT'
   if($detached){Set-SignerComProperty $verifier 'Content' $task.payloadBase64}
+  $stage='VERIFY_SIGNATURE'
   $null=Invoke-SignerComMethod $verifier 'VerifyCades' @($signature,1,$detached)
+  $stage='VERIFY_CONTENT_HASH'
   if(-not $detached){if((Hash-Bytes ([Convert]::FromBase64String((Get-SignerComProperty $verifier 'Content')))) -cne $task.payloadHash){throw 'SIGNATURE_PAYLOAD_MISMATCH'}}
+  $stage='VERIFY_SIGNER'
   $verifiedSigners=Get-SignerComProperty $verifier 'Signers'
   if((Get-SignerComProperty $verifiedSigners 'Count') -ne 1){throw 'SIGNATURE_CERTIFICATE_MISMATCH'}
   $verifiedSigner=Get-SignerComProperty $verifiedSigners 'Item' @(1)
   $verifiedCertificate=Get-SignerComProperty $verifiedSigner 'Certificate'
   if((Get-SignerComProperty $verifiedCertificate 'Thumbprint') -ne $cfg.CertificateThumbprint){throw 'SIGNATURE_CERTIFICATE_MISMATCH'}
+  $stage='CERTIFICATE_CHAIN'
   Check-Chain $cert
+  $stage='BUILD_SUBMISSION'
   $submission=@{taskId=$task.taskId;leaseId=$task.leaseId;signerId=$cfg.SignerId;payloadHash=$task.payloadHash;signatureBase64=($signature -replace '\s','');certificateBase64=((Invoke-SignerComMethod $cert 'Export' @(0)) -replace '\s','');verification=@{valid=$true;chainValid=$true;revocationChecked=$true;signerInn=$cfg.SellerInn;payloadHash=$task.payloadHash}}
   # Reuse the exact lease and result after uncertain HTTP completion. Never sign again for a network retry.
+  $stage='SUBMIT'
   $sent=$false
   for($attempt=0;$attempt -lt 3 -and -not $sent;$attempt++){
-   try{$null=Call-Backend 'submit' $submission;$sent=$true}catch{Start-Sleep -Seconds 2}
+   try{$null=Call-Backend 'submit' $submission;$sent=$true}catch{Write-Output (Get-SignerFailureDiagnostic $_ 'SUBMIT');Start-Sleep -Seconds 2}
   }
   if(-not $sent){throw 'SIGNATURE_DELIVERY_FAILED'}
  }catch{
+  $diagnostic=Get-SignerFailureDiagnostic $_ $stage
   # Exception messages may contain certificate data or payloads. Never log them.
   try{if($null -ne $cert){$null=Call-Backend 'heartbeat' @{signerId=$cfg.SignerId;certificateThumbprint=$cfg.CertificateThumbprint;certificateExpiresAt=([DateTime](Get-SignerComProperty $cert 'ValidToDate')).ToUniversalTime().ToString('o');ready=$false;errorCode='SIGNER_UNAVAILABLE'}}}catch{}
-  Write-Output ((Get-Date).ToString('s')+' SIGNER_UNAVAILABLE')
+  Write-Output ((Get-Date).ToString('s')+' '+$diagnostic)
   Start-Sleep -Seconds 15
  }
 }
