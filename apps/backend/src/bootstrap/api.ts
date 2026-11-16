@@ -41,6 +41,7 @@ import { createUserAccessStore } from '../infrastructure/persistence.js';
 import { createTelegramIdentityVerifier } from '../infrastructure/telegram-auth.js';
 import { createReadinessCheck } from '../infrastructure/readiness.js';
 import { createTelegramUpdateDelivery } from '../infrastructure/telegram-updates.js';
+import { createLabelDownloadLinks } from '../infrastructure/label-download-links.js';
 import { buildApp } from '../http/app.js';
 import { createTelegramBot } from '../telegram/index.js';
 
@@ -110,6 +111,16 @@ export async function createApiRuntime(config: AppConfig) {
         })
       : undefined;
   const app = await buildApp(config, {
+    ...(config.MARKING_ENCRYPTION_KEY && config.PUBLIC_API_URL
+      ? {
+          labelDownloadLinks: createLabelDownloadLinks({
+            key: config.MARKING_ENCRYPTION_KEY,
+            keyId: config.MARKING_ENCRYPTION_KEY_ID,
+            publicUrl: config.PUBLIC_API_URL,
+            findActiveUser: users.findActiveUser,
+          }),
+        }
+      : {}),
     ...(enrollment
       ? {
           signerEnrollment: enrollment,

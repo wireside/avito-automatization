@@ -43,7 +43,9 @@
 - `POST /api/v1/orders/:id/actions` → `{operationId, replayed}`; тело `{requestId, action, data}`.
 - `POST /api/v1/orders/:id/courier-options` с `{address?}` → допустимые интервалы.
 - `POST /api/v1/orders/:id/actions/:operationId/reconcile` → постановка сверки.
-- `GET /api/v1/orders/:id/actions/:operationId/label` → PDF.
+- `GET /api/v1/orders/:id/actions/:operationId/label` → PDF для авторизованного клиента.
+- `POST /api/v1/orders/:id/actions/:operationId/label-link` → защищённая ссылка на 10 минут. Mini App показывает «Открыть PDF» через Telegram `openLink` и копирование ссылки для отдельной вкладки внешнего браузера. Blob-скачивание внутри Telegram не используется; успех сохранения файла не заявляется.
+- `/avito/label#<ticket>` → внешняя страница; `POST /api/v1/avito-label/download` получает PDF по билету из тела запроса. Билет зашифрован, ограничен одним заказом/операцией, не содержит открытого initData и не попадает в access URL. При скачивании заново проверяются активный пользователь, его роли и принадлежность операции заказу. Нужны существующие `MARKING_ENCRYPTION_KEY`, `MARKING_ENCRYPTION_KEY_ID`, `PUBLIC_API_URL`; миграций нет.
 
 Старый `/orders/:id/confirm` закрыт; новый frontend использует `/actions`. Поле `mode: read_only` у GET-заказов обозначает только свойства чтения, а не режим всей системы.
 

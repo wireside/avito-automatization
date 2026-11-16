@@ -1,3 +1,5 @@
+import { registerLabelDownloadRoutes } from './routes/label-download.js';
+import type { LabelDownloadLinks } from '@avito/domain';
 import { registerWarehouseRoutes } from './routes/warehouses.js';
 import type { WarehouseSettings } from '@avito/domain';
 import { registerAvitoActionRoutes } from './routes/order-actions.js';
@@ -29,6 +31,7 @@ import {
 } from './routes/telegram-webhook.js';
 
 export interface HttpServices {
+  labelDownloadLinks?: LabelDownloadLinks;
   warehouseSettings?: WarehouseSettings;
   avitoOrderActions?: AvitoOrderActions;
   localSigner?: LocalSignerService;
@@ -84,6 +87,7 @@ export async function buildApp(
   );
   registerOrderRoutes(app, services);
   registerAvitoActionRoutes(app, services);
+  registerLabelDownloadRoutes(app, services);
   registerHealthRoutes(app, services.checkReadiness);
   registerAuthRoutes(app, services.verifyTelegramSession);
   registerTelegramWebhook(app, {

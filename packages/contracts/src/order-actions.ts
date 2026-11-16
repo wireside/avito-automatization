@@ -70,6 +70,10 @@ export const avitoActionQueuedSchema = z.object({
   operationId: z.uuid(),
   replayed: z.boolean(),
 });
+export const avitoLabelLinkSchema = z.object({
+  url: z.url(),
+  expiresAt: z.iso.datetime(),
+});
 export const courierOptionsSchema = z.object({
   address: z.string().optional(),
   addressDetails: z.string().optional(),

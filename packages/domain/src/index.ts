@@ -18,3 +18,5 @@ export * from './orders/actions.js';
 export * from './orders/shipment.js';
 
 export * from './marking/warehouses.js';
+
+export type { LabelDownloadLinks } from './orders/label-download.js';

@@ -84,7 +84,7 @@ pnpm telegram:owner <числовой_Telegram_ID>
 | `MINI_APP_ORIGIN`                                                     | Только origin frontend для CORS                                                                               |
 | `VITE_API_BASE_URL`                                                   | Публичный адрес API, встраивается в сборку frontend; секретов здесь нет                                       |
 | `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_SECRET`                     | HTTPS webhook и секрет проверки входящих обновлений                                                           |
-| `PUBLIC_API_URL`                                                      | Стабильный HTTPS origin backend для установщика и подписанта; не адрес Pages                                  |
+| `PUBLIC_API_URL`                                                      | Стабильный HTTPS origin backend для установщика, подписанта и скачивания этикеток; не адрес Pages             |
 | `MARKING_ENCRYPTION_KEY`, `MARKING_ENCRYPTION_KEY_ID`                 | Ключ AES-256 в Base64 и его ID; нужны для зашифрованных кодов, документов, подписей и сессий                  |
 | `CHZ_NATIONAL_CATALOG_API_KEY`                                        | Ключ НК для атрибутов по GTIN; не заменяет авторизацию True API                                               |
 | `CHZ_NATIONAL_CATALOG_ENVIRONMENT`, `CHZ_NATIONAL_CATALOG_TIMEOUT_MS` | Адресная среда НК и таймаут; не общий режим приложения                                                        |

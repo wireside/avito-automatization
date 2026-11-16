@@ -3,6 +3,7 @@ import {
   avitoActionCommandSchema,
   avitoActionsResponseSchema,
   avitoActionQueuedSchema,
+  avitoLabelLinkSchema,
   courierOptionsSchema,
 } from './order-actions.js';
 import {
@@ -409,6 +410,57 @@ function orderActionPaths() {
             'ApiError',
             'No uncertain action for this order.',
           ),
+        },
+      },
+    },
+    '/api/v1/orders/{id}/actions/{operationId}/label-link': {
+      post: {
+        operationId: 'createAvitoLabelLink',
+        tags: ['Orders'],
+        security,
+        parameters: [id, op],
+        description:
+          'Create an encrypted, label-scoped browser link valid for 10 minutes. Active user and roles are rechecked on download.',
+        responses: response(avitoLabelLinkSchema),
+      },
+    },
+    '/api/v1/avito-label/download': {
+      post: {
+        operationId: 'downloadAvitoLabelWithTicket',
+        tags: ['Orders'],
+        description:
+          'External browser download. Encrypted ticket is sent only in the POST body; no Telegram initData in URL.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['ticket'],
+                properties: {
+                  ticket: {
+                    type: 'string',
+                    minLength: 1,
+                    maxLength: 4096,
+                    pattern: '^[A-Za-z0-9_-]+$',
+                  },
+                },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Generated label',
+            content: {
+              'application/pdf': {
+                schema: { type: 'string', format: 'binary' },
+              },
+            },
+          },
+          ...authErrors,
+          '409': jsonResponse('ApiError', 'Label unavailable.'),
         },
       },
     },

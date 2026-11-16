@@ -711,3 +711,91 @@ test('sends tracking, return routing, courier interval and label requests throug
   await expect(dialog).not.toBeVisible();
   expect(commands[3]).toMatchObject({ action: 'label', data: {} });
 });
+
+for (const client of ['supported', 'unsupported', 'throwing'] as const) {
+  test(`label download offers external browser and copy fallback for ${client} Telegram`, async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await setup(page);
+    const operationId = '00000000-0000-4000-8000-000000000111';
+    const labelUrl = 'https://api.example.com/avito/label#encrypted-ticket';
+    await page.route('**/api/v1/orders/*/actions', (r) =>
+      r.fulfill({
+        json: {
+          writesEnabled: true,
+          operations: [
+            {
+              id: operationId,
+              action: 'label',
+              status: 'SUCCEEDED',
+              errorCode: null,
+              createdAt: new Date().toISOString(),
+              labelReady: true,
+            },
+          ],
+        },
+      }),
+    );
+    await page.route('**/label-link', (r) => {
+      expect(r.request().method()).toBe('POST');
+      expect(r.request().headers().authorization).toBe('tma test-data');
+      return r.fulfill({
+        json: {
+          url: labelUrl,
+          expiresAt: new Date(Date.now() + 600000).toISOString(),
+        },
+      });
+    });
+    await page.evaluate((client) => {
+      window.Telegram!.WebApp.isVersionAtLeast = () => client !== 'unsupported';
+      window.Telegram!.WebApp.openLink = (url, options) => {
+        if (client === 'throwing') throw Error('unsupported');
+        (window as unknown as { openedLabel: unknown }).openedLabel = {
+          url,
+          options,
+        };
+      };
+    }, client);
+    await page
+      .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Скачать этикетку', exact: true })
+      .click();
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByRole('textbox', { name: 'Ссылка на этикетку · 10 минут' }),
+    ).toHaveValue(labelUrl);
+    await dialog
+      .getByRole('button', { name: 'Открыть PDF', exact: true })
+      .click();
+    if (client === 'supported') {
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { openedLabel: unknown }).openedLabel,
+        ),
+      ).toEqual({ url: labelUrl, options: { try_instant_view: false } });
+    } else {
+      await expect(
+        dialog.getByText(
+          'Скопируйте ссылку и вставьте её в отдельную вкладку браузера вне Telegram.',
+          { exact: true },
+        ),
+      ).toBeVisible();
+    }
+    await dialog
+      .getByRole('button', { name: 'Скопировать ссылку', exact: true })
+      .click();
+    await expect(
+      dialog.getByRole('button', { name: 'Ссылка скопирована', exact: true }),
+    ).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      labelUrl,
+    );
+    await expect(
+      page.getByText('Этикетка скачана.', { exact: true }),
+    ).toHaveCount(0);
+  });
+}

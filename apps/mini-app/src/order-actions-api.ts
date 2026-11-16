@@ -1,4 +1,7 @@
-import type { AvitoActionCommandDto } from '@avito/contracts';
+import {
+  avitoLabelLinkSchema,
+  type AvitoActionCommandDto,
+} from '@avito/contracts';
 export function createOrderActionsApi(initData: string) {
   async function request(orderId: string, path: string, body?: unknown) {
     let response: Response;
@@ -54,17 +57,16 @@ export function createOrderActionsApi(initData: string) {
         )
       ).json() as Promise<unknown>;
     },
-    async download(orderId: string, id: string) {
-      const r = await request(
-        orderId,
-        `actions/${encodeURIComponent(id)}/label`,
+    async labelLink(orderId: string, id: string) {
+      return avitoLabelLinkSchema.parse(
+        await (
+          await request(
+            orderId,
+            `actions/${encodeURIComponent(id)}/label-link`,
+            {},
+          )
+        ).json(),
       );
-      const url = URL.createObjectURL(await r.blob());
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `avito-${orderId}.pdf`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
     },
   };
 }

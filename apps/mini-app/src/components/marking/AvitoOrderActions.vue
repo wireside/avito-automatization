@@ -193,13 +193,51 @@ async function loadIntervals() {
     busy.value = false;
   }
 }
-async function download(id: string) {
+const labelUrl = ref(''),
+  labelBusy = ref(''),
+  labelCopied = ref(false),
+  labelError = ref('');
+function openLabel() {
+  labelError.value = '';
   try {
-    await api.download(props.order.id, id);
-    message.value = 'Этикетка скачана.';
+    const app = window.Telegram?.WebApp;
+    if (app?.openLink && app.isVersionAtLeast?.('6.1') !== false) {
+      app.openLink(labelUrl.value, { try_instant_view: false });
+      return;
+    }
+    if (!app?.initData) {
+      window.location.assign(labelUrl.value);
+      return;
+    }
+  } catch {
+    /* Unsupported Telegram clients still offer a copyable link. */
+  }
+  labelError.value =
+    'Скопируйте ссылку и вставьте её в отдельную вкладку браузера вне Telegram.';
+}
+async function copyLabel() {
+  try {
+    await navigator.clipboard.writeText(labelUrl.value);
+    labelCopied.value = true;
+  } catch {
+    labelError.value =
+      'Скопируйте ссылку из поля ниже и откройте её в браузере вне Telegram.';
+  }
+}
+async function download(id: string) {
+  labelBusy.value = id;
+  labelUrl.value = '';
+  labelError.value = '';
+  labelCopied.value = false;
+  try {
+    labelUrl.value = (await api.labelLink(props.order.id, id)).url;
   } catch (e) {
     message.value =
-      e instanceof Error ? e.message : 'Не удалось скачать этикетку.';
+      e instanceof Error
+        ? e.message
+        : 'Не удалось получить ссылку на этикетку.';
+  } finally {
+    labelBusy.value = '';
   }
 }
 async function reconcile(id: string) {
@@ -333,11 +371,45 @@ const status = (s: string) =>
         @click="reconcile(op.id)"
         >Проверить результат</v-btn
       >
-      <v-btn v-if="op.labelReady" class="mt-2" @click="download(op.id)"
+      <v-btn
+        v-if="op.labelReady"
+        class="mt-2"
+        :loading="labelBusy === op.id"
+        :disabled="!!labelBusy"
+        @click="download(op.id)"
         >Скачать этикетку</v-btn
       >
     </div>
   </v-card>
+  <v-dialog
+    :model-value="!!labelUrl"
+    max-width="560"
+    @update:model-value="!$event && (labelUrl = '')"
+  >
+    <v-card class="pa-5">
+      <h2 class="text-title-medium mb-3">Скачать этикетку PDF</h2>
+      <p class="text-body-medium mb-3">
+        Откройте PDF во внешнем браузере и нажмите «Скачать PDF». Ссылка
+        действует 10 минут. Если Telegram блокирует скачивание, скопируйте
+        ссылку и вставьте её в отдельную вкладку браузера.
+      </p>
+      <v-text-field
+        :model-value="labelUrl"
+        readonly
+        label="Ссылка на этикетку · 10 минут"
+      />
+      <v-alert v-if="labelError" type="warning" class="mb-3">{{
+        labelError
+      }}</v-alert>
+      <div class="d-flex flex-wrap ga-2">
+        <v-btn color="primary-strong" @click="openLabel">Открыть PDF</v-btn>
+        <v-btn variant="outlined" @click="copyLabel">{{
+          labelCopied ? 'Ссылка скопирована' : 'Скопировать ссылку'
+        }}</v-btn>
+        <v-btn variant="text" @click="labelUrl = ''">Закрыть</v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
   <v-dialog
     :model-value="!!selected"
     max-width="560"

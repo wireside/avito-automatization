@@ -1,6 +1,7 @@
 import { afterEach, it, expect, vi } from 'vitest';
 import {
   createAvitoOrderActions,
+  PipelineError,
   type AvitoActionStore,
   type AvitoActionProvider,
   type OrderReader,
@@ -32,6 +33,12 @@ async function setup(role = 'OWNER', enabled = true) {
     get: vi.fn<OrderReader['get']>(),
     list: vi.fn<OrderReader['list']>(),
   } satisfies OrderReader;
+  const findActiveUser = vi.fn().mockResolvedValue({
+    id: '00000000-0000-4000-8000-000000000001',
+    telegramId: '1',
+    displayName: null,
+    roles: [role],
+  });
   const app = await buildApp(
     {
       LOG_LEVEL: 'silent',
@@ -39,6 +46,29 @@ async function setup(role = 'OWNER', enabled = true) {
       TELEGRAM_WEBHOOK_SECRET: undefined,
     },
     {
+      labelDownloadLinks: {
+        issue: () => ({
+          url: 'https://api.example.com/avito/label#fixture',
+          expiresAt: new Date(Date.now() + 600000).toISOString(),
+        }),
+        resolve: async (ticket) => {
+          const user = (await findActiveUser()) as
+            | {
+                id: string;
+                telegramId: string;
+                displayName: null;
+                roles: string[];
+              }
+            | undefined;
+          if (ticket !== 'fixture' || !user)
+            throw new PipelineError('UNAUTHORIZED');
+          return {
+            user,
+            orderId: '123',
+            operationId: '00000000-0000-4000-8000-000000000111',
+          };
+        },
+      },
       verifyTelegramSession: () =>
         Promise.resolve({
           ok: true,
@@ -59,7 +89,7 @@ async function setup(role = 'OWNER', enabled = true) {
     },
   );
   apps.push(app);
-  return { app, store, provider, reader };
+  return { app, store, provider, reader, findActiveUser };
 }
 const headers = { authorization: 'tma fixture' };
 const command = {
@@ -212,7 +242,104 @@ it('publishes all new routes in OpenAPI', async () => {
     '/api/v1/orders/{id}/actions',
     '/api/v1/orders/{id}/courier-options',
     '/api/v1/orders/{id}/actions/{operationId}/label',
+    '/api/v1/orders/{id}/actions/{operationId}/label-link',
+    '/api/v1/avito-label/download',
     '/api/v1/orders/{id}/actions/{operationId}/reconcile',
   ])
     expect(doc.paths).toHaveProperty(path);
+});
+
+it('exports labels via fragment tickets and POST while rechecking live access and order binding', async () => {
+  const { app, store, provider, findActiveUser } = await setup();
+  const operationId = '00000000-0000-4000-8000-000000000111';
+  const path = `/api/v1/orders/123/actions/${operationId}/label-link`;
+  expect((await app.inject({ method: 'POST', url: path })).statusCode).toBe(
+    401,
+  );
+  expect(
+    (await app.inject({ method: 'POST', url: path, headers })).statusCode,
+  ).toBe(409);
+  store.list.mockResolvedValue([
+    {
+      id: operationId,
+      action: 'label',
+      status: 'SUCCEEDED',
+      errorCode: null,
+      createdAt: new Date().toISOString(),
+      labelReady: true,
+      reconcilable: false,
+    },
+  ]);
+  const response = await app.inject({ method: 'POST', url: path, headers });
+  expect(response.statusCode).toBe(200);
+  expect(provider.download).not.toHaveBeenCalled();
+  const url = new URL(response.json<{ url: string }>().url);
+  const ticket = url.hash.slice(1);
+  const page = await app.inject(url.pathname);
+  expect(page.statusCode).toBe(200);
+  expect(page.headers['referrer-policy']).toBe('no-referrer');
+  expect(page.headers['cache-control']).toBe('no-store');
+  expect(page.headers['content-security-policy']).toContain(
+    "frame-ancestors 'none'",
+  );
+  store.load.mockResolvedValue({
+    id: operationId,
+    orderId: '123',
+    command: { action: 'label', requestId: operationId, data: {} },
+    started: true,
+    result: { labelTaskId: 'task' },
+  });
+  provider.download.mockResolvedValue(Buffer.from('%PDF-fixture'));
+  const download = () =>
+    app.inject({
+      method: 'POST',
+      url: '/api/v1/avito-label/download',
+      payload: { ticket },
+    });
+  const pdf = await download();
+  expect(pdf.statusCode).toBe(200);
+  expect(pdf.headers['content-type']).toBe('application/pdf');
+  expect(pdf.headers['content-disposition']).toContain(
+    'attachment; filename="avito-label.pdf"',
+  );
+  expect(pdf.headers['cache-control']).toBe('no-store');
+  expect(pdf.body).toBe('%PDF-fixture');
+  expect(provider.download).toHaveBeenCalledWith('task');
+  provider.download.mockClear();
+  store.load.mockResolvedValueOnce({
+    id: operationId,
+    orderId: '999',
+    command: { action: 'label', requestId: operationId, data: {} },
+    started: true,
+    result: { labelTaskId: 'other-task' },
+  });
+  expect((await download()).statusCode).toBe(409);
+  findActiveUser.mockResolvedValueOnce({
+    id: '00000000-0000-4000-8000-000000000001',
+    telegramId: '1',
+    displayName: null,
+    roles: [],
+  });
+  expect((await download()).statusCode).toBe(403);
+  findActiveUser.mockResolvedValueOnce(undefined);
+  expect((await download()).statusCode).toBe(401);
+  expect(
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/avito-label/download',
+        payload: { ticket: 'invalid' },
+      })
+    ).statusCode,
+  ).toBe(401);
+  expect(
+    (
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/avito-label/download',
+        payload: { ticket, orderId: '999' },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(provider.download).not.toHaveBeenCalled();
 });
