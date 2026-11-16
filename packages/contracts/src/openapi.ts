@@ -85,8 +85,17 @@ export function createPublicApiDocument() {
     info: {
       title: 'Avito warehouse API',
       version: '1.0.0',
-      description:
-        'Live Avito orders and durable seller actions, scanned intake and stock browsing. Matching National Catalog data completes receipt directly into AVAILABLE, without approval. Real Avito and Chestny ZNAK adapters, durable warehouse commands and managed Windows CryptoPro signing. External writes require explicit backend configuration.',
+      description: [
+        'Avito orders, inventory, packing, shipments, returns and Chestny ZNAK documents. Schemas are generated from the runtime Zod contracts.',
+        '### Authentication and roles',
+        'User requests send `Authorization: tma <Telegram.WebApp.initData>`. Signature, age and active roles are checked on every request; session verification does not issue a JWT. Reads: OWNER/ADMIN/WAREHOUSE/ACCOUNTANT/VIEWER. Warehouse and seller commands: OWNER/ADMIN/WAREHOUSE. Settings, irreversible disposal and corrections: OWNER/ADMIN. Document export: OWNER/ADMIN/ACCOUNTANT. Windows enrollment: OWNER. Agent requests use the separate bearer credential described by localSignerToken.',
+        '### Commands and retries',
+        'A new command uses a new requestId UUID. On a lost response, repeat the original UUID and payload; reuse with different content returns 409. Keep the full DataMatrix string and ASCII GS separators unchanged: do not trim, normalize or store codes in browser storage or analytics.',
+        'A successful command response confirms local commit or enqueueing, not provider completion. Read order actions, shipments, documents and integration status for progress and final results. Avito marking acceptance, CHZ document processing and physical stock are separate states. An uncertain seller action is reconciled through readback without resending the mutation.',
+        'Avito writes and CHZ document submission require separate backend permissions. The read_only mode in order GET responses describes observation only. Order confirmation uses POST /api/v1/orders/{id}/actions; the legacy /confirm route stays disabled.',
+        '### Errors',
+        'Transport errors return code, message and requestId; blocked marking commands also include blockers. The response requestId matches x-correlation-id and identifies the HTTP request, not the command idempotency UUID. HTTP 401 means missing/expired/invalid session, 403 insufficient access, 409 a blocked transition or conflict, 429 a rate limit and 503 missing configuration or an unavailable dependency. Read operation results even after HTTP success.',
+      ].join('\n\n'),
     },
     servers: [{ url: '/', description: 'The origin serving this API.' }],
     components: {
