@@ -1,4 +1,4 @@
-# SHTANISHKIN
+# Avito-Sklad
 
 [![CI/CD](https://github.com/wireside/avito-automatization/actions/workflows/cicd.yml/badge.svg)](https://github.com/wireside/avito-automatization/actions/workflows/cicd.yml)
 
