@@ -35,12 +35,16 @@ export async function buildSignerInstaller(connection: {
 }) {
   const names = [
     'install.ps1',
+    'background-host.cs',
+    'background-install.ps1',
+    'install-background.ps1',
     'agent.ps1',
     'policy.ps1',
     'crypto-check.ps1',
     'crypto-com.ps1',
     'uninstall.ps1',
     'Установить.cmd',
+    'Настроить фон.cmd',
     'ПРОЧИТАЙТЕ.txt',
   ];
   const files = await Promise.all(

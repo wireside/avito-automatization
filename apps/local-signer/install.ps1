@@ -1,7 +1,8 @@
-﻿param([string]$BootstrapPath)
+﻿param([string]$BootstrapPath,[string]$OwnerSid)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'policy.ps1')
 . (Join-Path $PSScriptRoot 'crypto-check.ps1')
+. (Join-Path $PSScriptRoot 'background-install.ps1')
 Add-Type -AssemblyName System.Windows.Forms
 function Fail([string]$Text){[Windows.Forms.MessageBox]::Show($Text,'Подключение подписи','OK','Warning')|Out-Null;exit 1}
 function Hash([string]$Text){$sha=[Security.Cryptography.SHA256]::Create();try{return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text)))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}}
@@ -9,6 +10,18 @@ function Protect([string]$Value){return ConvertFrom-SecureString (ConvertTo-Secu
 function Unprotect([string]$Value){$secure=ConvertTo-SecureString $Value;$ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure);try{return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)}}
 function RandomHex { $bytes=New-Object byte[] 32;$rng=[Security.Cryptography.RandomNumberGenerator]::Create();try{$rng.GetBytes($bytes);return ([BitConverter]::ToString($bytes)).Replace('-','').ToLowerInvariant()}finally{$rng.Dispose()}}
 if(-not $BootstrapPath){$BootstrapPath=Join-Path $PSScriptRoot 'connection.json'}
+if(Get-Service -Name 'AvitoWarehouseSigner' -ErrorAction SilentlyContinue){Fail 'Обнаружена прежняя Windows-служба AvitoWarehouseSigner. Сначала остановите и удалите её, затем настройте запуск после входа.'}
+$currentSid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+if($OwnerSid -and $OwnerSid -ne $currentSid){Fail 'Запустите установку с правами администратора под владельцем сертификата. Нельзя вводить данные другого администратора.'}
+$isAdmin=([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if(-not $isAdmin){
+ try{
+  $arguments='-NoProfile -ExecutionPolicy RemoteSigned -File "'+$PSCommandPath+'" -BootstrapPath "'+$BootstrapPath+'" -OwnerSid "'+$currentSid+'"'
+  $process=Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+  exit $process.ExitCode
+ }catch{Fail 'Для настройки автозапуска подтвердите запрос администратора Windows. Настройки подписи не изменены.'}
+}
+
 try{$bootstrap=Get-Content -LiteralPath $BootstrapPath -Raw|ConvertFrom-Json;$base=[Uri]$bootstrap.backendUrl;if($base.Scheme -ne 'https' -or $base.UserInfo -or $base.Query -or $base.Fragment -or $base.AbsolutePath -ne '/' -or $bootstrap.ticket -notmatch '^[A-Za-z0-9_-]{43}$'){throw 'INVALID_BOOTSTRAP'}}catch{Fail 'Получите новый установщик в нашем Telegram-боте: /signer. Файл подключения отсутствует или повреждён.'}
 $cryptoCheck=Test-SignerCryptoEnvironment
 if(-not $cryptoCheck.Ready){Fail (Format-SignerCryptoFailure $cryptoCheck)}
@@ -56,17 +69,10 @@ try{
   Start-Sleep -Seconds 3
  }
  if(-not $active){Fail 'Подтверждение не получено. Запустите установщик повторно или получите новую ссылку через /signer.'}
- Stop-ScheduledTask -TaskName 'AvitoWarehouseSigner' -ErrorAction SilentlyContinue
- foreach($name in @('agent.ps1','policy.ps1','crypto-com.ps1')){Copy-Item (Join-Path $PSScriptRoot $name) (Join-Path $dir $name) -Force}
  $config=Join-Path $dir 'config.json'
  @{BackendUrl=$cfg.BackendUrl;SellerInn=$cfg.SellerInn;CertificateThumbprint=$cfg.CertificateThumbprint;SignerId=$cfg.SignerId;AgentTokenProtected=$cfg.AgentTokenProtected}|ConvertTo-Json|Set-Content -LiteralPath $config -Encoding UTF8
- $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument (Get-AgentArguments $dir $config)
- $trigger=New-ScheduledTaskTrigger -AtLogOn -User $identity
- $principal=New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
- $settings=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
- Register-ScheduledTask -TaskName 'AvitoWarehouseSigner' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force|Out-Null
- Start-ScheduledTask -TaskName 'AvitoWarehouseSigner'
+ try{Install-SignerBackgroundTask $dir}catch{if(Get-ScheduledTask -TaskName 'AvitoWarehouseSigner' -ErrorAction SilentlyContinue){Start-ScheduledTask -TaskName 'AvitoWarehouseSigner'};throw}
  Remove-Item -LiteralPath $pending -Force
  $token=$null
- [Windows.Forms.MessageBox]::Show('Подписант установлен. Оставьте владельца вошедшим в Windows и токен подключённым. При первом запросе подписи может появиться окно PIN. Состояние подключения видно в настройках приложения.','Готово','OK','Information')|Out-Null
+ [Windows.Forms.MessageBox]::Show('Подписант настроен. Он работает в фоне без терминала и запускается после входа в Windows. Пароль Windows не требуется. Оставьте компьютер без сна и токен подключённым. Состояние видно в приложении.','Готово','OK','Information')|Out-Null
 }catch{Fail 'Установка не завершена. Проверьте интернет и доступность backend, затем запустите этот же установщик снова. Если ссылка истекла — отправьте боту /signer. Технические данные и секреты не выводятся.'}

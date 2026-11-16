@@ -1,4 +1,4 @@
 ﻿$ErrorActionPreference='Stop'
-Stop-ScheduledTask -TaskName 'AvitoWarehouseSigner' -ErrorAction SilentlyContinue
-Unregister-ScheduledTask -TaskName 'AvitoWarehouseSigner' -Confirm:$false
-# Keep configuration for an intentional reinstall; remove it manually to revoke local access.
+$task=Get-ScheduledTask -TaskName 'AvitoWarehouseSigner' -ErrorAction SilentlyContinue
+if($task){Stop-ScheduledTask -TaskName 'AvitoWarehouseSigner';Unregister-ScheduledTask -TaskName 'AvitoWarehouseSigner' -Confirm:$false}
+# Preserve encrypted configuration, certificates and private keys.

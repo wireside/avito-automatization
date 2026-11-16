@@ -53,9 +53,13 @@ describe('Windows installer', () => {
         'crypto-com.ps1',
         'connection.json',
         'install.ps1',
+        'background-host.cs',
+        'background-install.ps1',
+        'install-background.ps1',
         'uninstall.ps1',
         'ПРОЧИТАЙТЕ.txt',
         'Установить.cmd',
+        'Настроить фон.cmd',
       ].sort(),
     );
     expect(JSON.parse(strFromU8(zip['connection.json']!))).toEqual({
@@ -63,6 +67,18 @@ describe('Windows installer', () => {
       ticket,
     });
     expect(strFromU8(zip['install.ps1']!)).toContain('AgentTokenProtected');
+    expect(strFromU8(zip['install.ps1']!)).toContain(
+      'Install-SignerBackgroundTask',
+    );
+    expect(strFromU8(zip['install.ps1']!)).not.toContain(
+      'New-ScheduledTaskAction',
+    );
+    expect(strFromU8(zip['background-host.cs']!)).toContain(
+      'CreateNoWindow=true',
+    );
+    expect(strFromU8(zip['install-background.ps1']!)).not.toContain(
+      '/local-signer/register',
+    );
     expect(strFromU8(zip['install.ps1']!)).not.toContain('Read-Host');
     expect(strFromU8(zip['Установить.cmd']!)).not.toContain('Bypass');
     expect([...zip['agent.ps1']!.slice(0, 3)]).toEqual([239, 187, 191]);

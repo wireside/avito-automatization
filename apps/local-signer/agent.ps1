@@ -1,8 +1,9 @@
-﻿param([Parameter(Mandatory=$true)][string]$ConfigPath)
+﻿param([Parameter(Mandatory=$true)][string]$ConfigPath,[switch]$BackgroundMode)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'policy.ps1')
 . (Join-Path $PSScriptRoot 'crypto-com.ps1')
+trap { Write-Output (Get-SignerFailureDiagnostic $_ 'STARTUP'); exit 1 }
 $cfg=Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 $base=[Uri]$cfg.BackendUrl
 if($base.Scheme -ne 'https' -or $base.UserInfo -or $base.Query -or $base.Fragment -or $base.AbsolutePath -ne '/'){throw 'HTTPS_REQUIRED'}
@@ -11,10 +12,18 @@ if($cfg.PSObject.Properties.Name -contains 'AgentTokenProtected'){
  $secure=ConvertTo-SecureString $cfg.AgentTokenProtected;$ptr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
  try{$agentToken=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)}finally{[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)}
 }else{$agentToken=$cfg.AgentToken}
+# Avoid duplicate workers across a manual session, old task and service.
+$mutex=[Threading.Mutex]::new($false,('Global\AvitoWarehouseSigner-'+$cfg.SignerId))
+try{$ownsMutex=$mutex.WaitOne(0)}catch [Threading.AbandonedMutexException]{$ownsMutex=$true}
+if(-not $ownsMutex){$mutex.Dispose();exit 2}
+function Touch-BackgroundHealth {
+ if($BackgroundMode){[IO.File]::WriteAllText((Join-Path (Split-Path -Parent $ConfigPath) 'agent.alive'),[DateTime]::UtcNow.ToString('o'))}
+}
 $headers=@{Authorization=('Bearer '+$agentToken)}
 $agentToken=$null
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
 function Call-Backend([string]$Action,$Body){
+ Touch-BackgroundHealth
  Invoke-RestMethod -Method Post -Uri ($base.AbsoluteUri.TrimEnd('/')+'/api/v1/local-signer/'+$Action) -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes(($Body|ConvertTo-Json -Depth 12 -Compress))) -TimeoutSec 20
 }
 function Hash-Bytes([byte[]]$Bytes){$sha=[Security.Cryptography.SHA256]::Create();try{return ([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}}
@@ -46,6 +55,7 @@ function Check-Chain($Cert){
 while($true){
  $cert=$null
  $stage='CERTIFICATE'
+ Touch-BackgroundHealth
  try{
   $cert=Get-Certificate
   $stage='CERTIFICATE_CHAIN'

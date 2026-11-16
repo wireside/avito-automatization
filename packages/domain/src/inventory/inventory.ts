@@ -154,8 +154,6 @@ export function createReceiveStock(deps: {
         ? { catalog: catalog.product }
         : {}),
     });
-    // Persistence may still resolve a replay, duplicate or a concurrently cached card.
-    // A missing catalog can never create a provisional unit in the transaction.
     if (!result.ok && result.code === 'CATALOG_NOT_FOUND') {
       const code =
         catalog?.status === 'UNAVAILABLE'

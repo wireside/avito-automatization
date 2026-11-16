@@ -11,8 +11,6 @@ export type ParseMarkingResult =
   | { ok: true; marking: ParsedMarking }
   | { ok: false; code: 'INVALID_MARKING' | 'INVALID_GTIN' };
 
-// Only transport decoration is removed. Original input is encrypted unchanged.
-// This profile deliberately refuses missing GS separators and other product groups.
 export function parseClothingMarking(
   raw: string,
   scannerProfile: ScannerProfile,
@@ -21,7 +19,6 @@ export function parseClothingMarking(
   if (scannerProfile === 'keyboard-gs1-v1')
     payload = payload.replace(/(?:\r\n|\r|\n|\t)$/, '');
   if (payload.startsWith(']d2')) payload = payload.slice(3);
-  // ZXing emits the initial GS1 FNC1 as GS; this is framing, not the AI separator.
   if (payload.startsWith('\u001d')) payload = payload.slice(1);
   const match =
     // eslint-disable-next-line no-control-regex -- ASCII GS is required by this GS1 profile.

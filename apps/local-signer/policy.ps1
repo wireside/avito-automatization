@@ -4,10 +4,6 @@ function Get-SignerInn([string]$Subject) {
  if(-not $match.Success){throw 'CERTIFICATE_INN_UNREADABLE'}
  return $match.Groups[1].Value
 }
-function Get-AgentArguments([string]$Directory,[string]$ConfigPath) {
- $script=Join-Path $Directory 'agent.ps1'
- return "-NoProfile -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File `"$script`" -ConfigPath `"$ConfigPath`""
-}
 function Assert-SigningTask($Task,[string]$SellerInn) {
  if($Task.sellerInn -ne $SellerInn -or [DateTimeOffset]$Task.expiresAt -le [DateTimeOffset]::UtcNow){throw 'TASK_POLICY_REJECTED'}
  $bytes=[Convert]::FromBase64String($Task.payloadBase64)
