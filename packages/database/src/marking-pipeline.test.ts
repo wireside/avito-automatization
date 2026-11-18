@@ -556,13 +556,25 @@ const url =
             sql`SELECT status FROM integration_operations WHERE aggregate_id=${f.unitId} AND idempotency_key LIKE 'stock-status:%'`,
           )
         ).rows;
-      await pipeline.reconcile();
-      expect(await scheduled()).toEqual([]);
-
-      await db.db
-        .execute(sql`INSERT INTO chz_sessions(seller_inn,ciphertext,key_id,identity_hash,expires_at)
-        VALUES(${inn},'fixture','fixture','fixture',now()+interval '1 hour')`);
+      // The signer suite can leave an expired session for the same seller in the CI database.
+      const previousSession = (
+        await db.db.execute<{ expiry: string }>(
+          sql`SELECT expires_at::text AS expiry FROM chz_sessions WHERE seller_inn=${inn}`,
+        )
+      ).rows[0];
       try {
+        if (previousSession)
+          await db.db.execute(
+            sql`UPDATE chz_sessions SET expires_at=now() WHERE seller_inn=${inn}`,
+          );
+        await pipeline.reconcile();
+        expect(await scheduled()).toEqual([]);
+
+        await db.db.execute(sql`
+          INSERT INTO chz_sessions(seller_inn,ciphertext,key_id,identity_hash,expires_at)
+          VALUES(${inn},'fixture','fixture','fixture',now()+interval '1 hour')
+          ON CONFLICT (seller_inn) DO UPDATE SET expires_at=excluded.expires_at
+        `);
         await pipeline.reconcile();
         await pipeline.reconcile();
         expect(await scheduled()).toEqual([{ status: 'PENDING' }]);
@@ -603,9 +615,14 @@ const url =
           legal_state: 'WITHDRAWN',
         });
       } finally {
-        await db.db.execute(
-          sql`DELETE FROM chz_sessions WHERE seller_inn=${inn}`,
-        );
+        if (previousSession)
+          await db.db.execute(
+            sql`UPDATE chz_sessions SET expires_at=${previousSession.expiry}::timestamptz WHERE seller_inn=${inn}`,
+          );
+        else
+          await db.db.execute(
+            sql`DELETE FROM chz_sessions WHERE seller_inn=${inn}`,
+          );
       }
     });
     it('reserves and packs in-circulation stock with confirmed ownership and no incoming document link', async () => {
