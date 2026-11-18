@@ -8,13 +8,17 @@ import {
   ProviderError,
   createProcessIntegrationOperation,
   type PipelineAction,
+  type MarketplaceOrder,
   type CodeObservation,
   type ProviderDocument,
 } from '@avito/domain';
 import { createDatabaseClient } from './client.js';
 import { createWarehouseSettingsStore } from './warehouses.js';
 import { createInventoryStore } from './inventory.js';
-import { readAvitoShipmentReference } from './avito-import.js';
+import {
+  prepareAvitoImport,
+  readAvitoShipmentReference,
+} from './avito-import.js';
 import { createMarkingPipelineStore } from './marking-pipeline.js';
 import { createMarkingWorkStore } from './provider-work.js';
 import {
@@ -243,7 +247,7 @@ const url =
         evidenceReference: incomingId,
       });
       await drain();
-      return { unitId: r.unit.id, variantId: r.unit.variantId, cis, raw };
+      return { unitId: r.unit.id, variantId: r.unit.variantId, gtin, cis, raw };
     }
     async function shipment(f: Awaited<ReturnType<typeof fixture>>) {
       const r = await command('create', {
@@ -393,6 +397,103 @@ const url =
         pipeline.command(actor, 'pack', { ...input, raw: f.raw + 'x' }),
       ).rejects.toThrow('IDEMPOTENCY_CONFLICT');
       await drain();
+    });
+    it('reserves only one last pair and applies a different size to a later order', async () => {
+      const first = await fixture();
+      const second = await fixture();
+      const externalAccountId = randomUUID();
+      const listingId = '12345';
+      const timestamp = new Date().toISOString();
+      const order = (id: string): MarketplaceOrder => ({
+        id,
+        marketplaceId: null,
+        status: 'ready_to_ship',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        items: [
+          {
+            avitoId: listingId,
+            title: 'Брюки',
+            quantity: 1,
+            priceMinor: 250000,
+          },
+        ],
+        priceMinor: 250000,
+        schedules: { confirmTill: null, shipTill: null },
+        delivery: {
+          serviceName: null,
+          serviceType: null,
+          trackingNumber: null,
+          dispatchNumber: null,
+        },
+        availableActions: [],
+      });
+      const importer = createMarkingPipeline(store, {
+        importOrder: (input) =>
+          prepareAvitoImport(
+            db.db,
+            order(String(input.externalOrderId)),
+            input,
+            externalAccountId,
+          ),
+      });
+      const collect = (variantId?: string) => ({
+        requestId: randomUUID(),
+        externalOrderId: randomUUID(),
+        warehouseId,
+        mappings: variantId ? [{ externalItemId: listingId, variantId }] : [],
+      });
+      const attempts = [collect(first.variantId), collect(first.variantId)];
+      const results = await Promise.allSettled(
+        attempts.map((input) => importer.command(actor, 'importOrder', input)),
+      );
+      expect(
+        results.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      expect(
+        results.find((result) => result.status === 'rejected'),
+      ).toMatchObject({
+        reason: { message: 'INSUFFICIENT_LEGAL_STOCK' },
+      });
+      const winningIndex = results.findIndex(
+        (result) => result.status === 'fulfilled',
+      );
+      expect(
+        await importer.command(actor, 'importOrder', attempts[winningIndex]!),
+      ).toMatchObject({ replayed: true });
+
+      const query = { search: first.gtin, offset: 0, limit: 20, warehouseId };
+      expect(
+        (await inventory.list({ ...query, stock: 'available' })).items,
+      ).toHaveLength(0);
+      expect(
+        (await inventory.list({ ...query, stock: 'reserved' })).items,
+      ).toMatchObject([{ available: 0, reserved: 1 }]);
+      expect(
+        (await inventory.units(first.variantId, 0, warehouseId, 'reserved'))
+          .items,
+      ).toMatchObject([{ id: first.unitId, stockStatus: 'reserved' }]);
+      expect(
+        (await inventory.units(first.variantId, 0, warehouseId, 'available'))
+          .items,
+      ).toHaveLength(0);
+
+      expect(
+        await importer.command(actor, 'importOrder', collect(second.variantId)),
+      ).toMatchObject({
+        result: { unitIds: [second.unitId] },
+      });
+      const implicit = collect();
+      expect(
+        await prepareAvitoImport(
+          db.db,
+          order(implicit.externalOrderId),
+          implicit,
+          externalAccountId,
+        ),
+      ).toMatchObject({
+        items: [{ variantId: first.variantId }],
+      });
     });
     it('does not reserve a code whose provider owner differs', async () => {
       const f = await fixture();

@@ -28,6 +28,7 @@ const {
   search,
   appliedSearch,
   offset,
+  filter,
   expanded,
   searchStock,
   changePage,
@@ -127,7 +128,11 @@ watch(cameraOpen, (value) => {
         <p class="text-label-small text-primary mb-1 d-md-none">SHTANISHKIN</p>
         <h1 id="warehouse-title" class="text-title-large">Склад</h1>
         <p class="d-none d-md-block text-body-medium text-secondary mt-1">
-          Приёмка маркированной одежды
+          {{
+            activeTab === 'stock'
+              ? 'Наличие и резервы'
+              : 'Приёмка маркированной одежды'
+          }}
         </p>
       </div>
       <div class="d-flex align-center ga-3">
@@ -173,7 +178,7 @@ watch(cameraOpen, (value) => {
         ></v-tabs
       >
     </v-sheet>
-    <div class="d-flex ga-3 ga-md-4 mb-4 mb-md-6">
+    <div v-if="activeTab !== 'stock'" class="d-flex ga-3 ga-md-4 mb-4 mb-md-6">
       <v-card
         v-for="metric in visibleMetrics"
         :key="metric.label"
@@ -190,7 +195,11 @@ watch(cameraOpen, (value) => {
         <p class="text-label-small text-secondary">{{ metric.label }}</p>
       </v-card>
     </div>
-    <v-alert v-if="stock.isError.value" type="error" class="mb-5" role="alert"
+    <v-alert
+      v-if="activeTab !== 'stock' && stock.isError.value"
+      type="error"
+      class="mb-5"
+      role="alert"
       >{{ stock.error.value?.message
       }}<v-btn class="ml-3" size="small" @click="stock.refetch()"
         >Повторить загрузку</v-btn
@@ -281,6 +290,7 @@ watch(cameraOpen, (value) => {
         <StockBrowser
           v-else
           v-model="search"
+          v-model:filter="filter"
           :data="stock.data.value"
           :pending="stock.isPending.value"
           :failed="stock.isError.value"
@@ -288,6 +298,7 @@ watch(cameraOpen, (value) => {
           :applied-search="appliedSearch"
           @search="searchStock"
           @page="changePage"
+          @retry="stock.refetch()"
           @units="expanded = $event"
         />
         <p
@@ -349,6 +360,7 @@ watch(cameraOpen, (value) => {
           :key="expanded"
           :roles="roles"
           :variant-id="expanded"
+          :initial-filter="activeTab === 'stock' ? filter : 'all'"
           :init-data="initData" /></v-card
     ></v-dialog>
   </section>

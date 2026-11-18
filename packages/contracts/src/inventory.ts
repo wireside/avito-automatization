@@ -18,9 +18,12 @@ export const inventoryScanRequestSchema = z
     scannerProfile: z.enum(['camera-gs1-v1', 'keyboard-gs1-v1']),
   })
   .strict();
+const stockFilterSchema = z.enum(['all', 'available', 'reserved']);
+export type StockFilter = z.infer<typeof stockFilterSchema>;
 export const inventoryListQuerySchema = z
   .object({
     warehouseId: z.uuid().optional(),
+    stock: stockFilterSchema.optional(),
     search: z
       .string()
       .max(120)
@@ -34,6 +37,7 @@ export const inventoryListQuerySchema = z
   .strict();
 export const inventoryUnitsQuerySchema = z
   .object({
+    stock: stockFilterSchema.optional(),
     warehouseId: z.uuid().optional(),
     offset: z.coerce.number().int().min(0).max(1000000).default(0),
   })
@@ -68,6 +72,7 @@ export const inventoryUnitSchema = z.object({
   sizeSystem: z.string().nullable().optional(),
   maskedCode: z.string(),
   state: z.string(),
+  stockStatus: z.enum(['available', 'reserved', 'other']).optional(),
   location: z.string().nullable(),
   receiptId: z.uuid(),
   receiptNumber: z.string(),
@@ -80,6 +85,7 @@ export const inventoryPageResponseSchema = z.object({
     onHand: quantity,
     available: quantity,
     quarantine: quantity,
+    reserved: quantity.optional(),
   }),
   items: z.array(inventoryVariantSchema),
   hasMore: z.boolean(),

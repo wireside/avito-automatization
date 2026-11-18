@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, defineAsyncComponent } from 'vue';
+import { computed, ref, defineAsyncComponent, watch } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
-import type { InventoryUnitsResponse } from '@avito/contracts';
+import type { InventoryUnitsResponse, StockFilter } from '@avito/contracts';
 import { createInventoryApi } from '../inventory-api';
 import { useWarehouses } from '../composables/useWarehouses';
 import { layout } from '../design/tokens';
@@ -12,8 +12,18 @@ const props = defineProps<{
   variantId: string;
   initData: string;
   roles?: string[];
+  initialFilter: StockFilter;
 }>();
 const offset = ref(0);
+const filter = ref(props.initialFilter);
+watch(filter, () => {
+  offset.value = 0;
+});
+const filters = [
+  { key: 'all', label: 'Все' },
+  { key: 'available', label: 'Доступные' },
+  { key: 'reserved', label: 'В резерве' },
+] as const;
 const { warehouseId } = useWarehouses(props.initData);
 const api = createInventoryApi(props.initData);
 const units = useQuery({
@@ -22,10 +32,11 @@ const units = useQuery({
     warehouseId.value,
     props.variantId,
     offset.value,
+    filter.value,
   ]),
   queryFn: ({ signal }) =>
     api<InventoryUnitsResponse>(
-      `/variants/${props.variantId}/units?offset=${offset.value}${warehouseId.value ? '&warehouseId=' + warehouseId.value : ''}`,
+      `/variants/${props.variantId}/units?offset=${offset.value}&stock=${filter.value}${warehouseId.value ? '&warehouseId=' + warehouseId.value : ''}`,
       undefined,
       signal,
     ),
@@ -47,6 +58,22 @@ const date = (value: string) =>
 </script>
 <template>
   <div>
+    <div
+      class="d-flex flex-wrap ga-2 mb-4"
+      role="group"
+      aria-label="Наличие экземпляров"
+    >
+      <v-btn
+        v-for="option in filters"
+        :key="option.key"
+        color="primary"
+        :variant="filter === option.key ? 'tonal' : 'outlined'"
+        density="comfortable"
+        :aria-pressed="filter === option.key"
+        @click="filter = option.key"
+        >{{ option.label }}</v-btn
+      >
+    </div>
     <v-progress-linear
       v-if="units.isPending.value"
       indeterminate
@@ -62,7 +89,7 @@ const date = (value: string) =>
         v-if="!units.data.value?.items.length"
         class="text-body-medium text-secondary py-4"
       >
-        Экземпляров в этой ячейке больше нет.
+        Нет экземпляров с выбранным фильтром.
       </p>
       <v-sheet
         v-for="unit in units.data.value?.items"
@@ -75,12 +102,32 @@ const date = (value: string) =>
           <strong class="text-title-small">{{ unit.maskedCode }}</strong
           ><v-chip
             :color="
-              unit.state === 'AVAILABLE' ? 'success-soft' : 'warning-soft'
+              (
+                unit.stockStatus
+                  ? unit.stockStatus === 'available'
+                  : unit.state === 'AVAILABLE'
+              )
+                ? 'success-soft'
+                : 'warning-soft'
             "
             :class="
-              unit.state === 'AVAILABLE' ? 'text-success' : 'text-warning'
+              (
+                unit.stockStatus
+                  ? unit.stockStatus === 'available'
+                  : unit.state === 'AVAILABLE'
+              )
+                ? 'text-success'
+                : 'text-warning'
             "
-            >{{ states[unit.state] ?? 'Требует уточнения' }}</v-chip
+            >{{
+              unit.stockStatus === 'reserved'
+                ? unit.state === 'PACKING'
+                  ? 'В резерве · упаковка'
+                  : 'В резерве'
+                : unit.stockStatus === 'other' && unit.state === 'AVAILABLE'
+                  ? 'Недоступен'
+                  : (states[unit.state] ?? 'Требует уточнения')
+            }}</v-chip
           >
         </div>
         <p class="text-body-small text-secondary mt-2">
@@ -100,10 +147,16 @@ const date = (value: string) =>
         class="d-flex justify-space-between ga-3"
         aria-label="Страницы экземпляров"
       >
-        <v-btn v-if="offset" @click="offset -= layout.unitsPageSize"
+        <v-btn
+          v-if="offset"
+          color="primary"
+          variant="outlined"
+          @click="offset -= layout.unitsPageSize"
           >Назад</v-btn
         ><v-btn
           v-if="units.data.value?.hasMore"
+          color="primary"
+          variant="outlined"
           @click="offset += layout.unitsPageSize"
           >Следующие экземпляры</v-btn
         >

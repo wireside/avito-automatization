@@ -34,21 +34,6 @@ export const avitoActionCommandSchema = z.intersection(
         })
         .strict(),
     }),
-    z.object({
-      action: z.literal('setCourierDeliveryRange'),
-      data: z
-        .object({
-          address: value,
-          addressDetails: z.string().max(500).optional(),
-          name: value,
-          phone: z.string().regex(/^\+?\d{10,15}$/),
-          startDate: z.iso.datetime({ offset: true }),
-          endDate: z.iso.datetime({ offset: true }),
-          intervalType: z.enum(['fixed', 'asap']),
-        })
-        .strict()
-        .refine((d) => Date.parse(d.endDate) > Date.parse(d.startDate)),
-    }),
     z.object({ action: z.literal('label'), data: empty }),
   ]),
 );

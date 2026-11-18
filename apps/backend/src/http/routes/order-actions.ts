@@ -102,14 +102,6 @@ export function registerAvitoActionRoutes(
     if (!parsed.success) throw new PipelineError('INVALID_REQUEST');
     return s.enqueue(u, id, parsed.data);
   });
-  route('POST', 'courier-options', (s, u, id, query) => {
-    const parsed = z
-      .object({ address: z.string().min(1).max(500).optional() })
-      .strict()
-      .safeParse(query);
-    if (!parsed.success) throw new PipelineError('INVALID_REQUEST');
-    return s.courier(u, id, parsed.data.address);
-  });
   route(
     'GET',
     'actions/:operationId/label',

@@ -4,7 +4,6 @@ import {
   PipelineError,
   type AvitoActionStore,
   type AvitoActionProvider,
-  type OrderReader,
 } from '@avito/domain';
 import { buildApp } from '../app.js';
 const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
@@ -29,10 +28,6 @@ async function setup(role = 'OWNER', enabled = true) {
     courier: vi.fn<AvitoActionProvider['courier']>(),
     download: vi.fn<AvitoActionProvider['download']>(),
   } satisfies AvitoActionProvider;
-  const reader = {
-    get: vi.fn<OrderReader['get']>(),
-    list: vi.fn<OrderReader['list']>(),
-  } satisfies OrderReader;
   const findActiveUser = vi.fn().mockResolvedValue({
     id: '00000000-0000-4000-8000-000000000001',
     telegramId: '1',
@@ -83,13 +78,12 @@ async function setup(role = 'OWNER', enabled = true) {
       avitoOrderActions: createAvitoOrderActions({
         store,
         provider,
-        reader,
         writesEnabled: enabled,
       }),
     },
   );
   apps.push(app);
-  return { app, store, provider, reader, findActiveUser };
+  return { app, store, provider, findActiveUser };
 }
 const headers = { authorization: 'tma fixture' };
 const command = {
@@ -113,7 +107,7 @@ it('authenticates before queuing or reading actions', async () => {
   expect(store.list).not.toHaveBeenCalled();
 });
 it('queues a typed idempotent command without making a provider call in HTTP', async () => {
-  const { app, store, provider, reader } = await setup();
+  const { app, store, provider } = await setup();
   const result = await app.inject({
     method: 'POST',
     url: '/api/v1/orders/123/actions',
@@ -130,7 +124,6 @@ it('queues a typed idempotent command without making a provider call in HTTP', a
     expect.any(String),
   );
   expect(provider.execute).not.toHaveBeenCalled();
-  expect(reader.get).not.toHaveBeenCalled();
 });
 it.each(['VIEWER', 'ACCOUNTANT'])(
   'refuses write and reconciliation for %s',
@@ -183,18 +176,6 @@ it.each([
     action: 'acceptReturnOrder',
     data: { terminalNumber: 'bad', name: 'Test', phone: 'bad' },
   },
-  {
-    ...command,
-    action: 'setCourierDeliveryRange',
-    data: {
-      address: 'Address',
-      name: 'Test',
-      phone: '+79999999999',
-      startDate: '2026-11-10T13:00:00Z',
-      endDate: '2026-11-10T12:00:00Z',
-      intervalType: 'fixed',
-    },
-  },
 ])('rejects invalid action input before storage', async (payload) => {
   const { app, store } = await setup();
   expect(
@@ -209,38 +190,44 @@ it.each([
   ).toBe(400);
   expect(store.enqueue).not.toHaveBeenCalled();
 });
-it('takes the courier address in a body and never accepts a provider URL', async () => {
-  const { app, provider } = await setup('VIEWER');
-  expect(
-    (
-      await app.inject({
-        method: 'POST',
-        url: '/api/v1/orders/123/courier-options',
-        headers,
-        payload: { address: 'Address' },
-      })
-    ).statusCode,
-  ).toBe(403);
+it('rejects new courier requests while preserving the queue', async () => {
+  const { app, store, provider } = await setup();
+  const options = await app.inject({
+    method: 'POST',
+    url: '/api/v1/orders/123/courier-options',
+    headers,
+    payload: { address: 'Address' },
+  });
+  expect(options.statusCode).toBe(404);
+  const send = await app.inject({
+    method: 'POST',
+    url: '/api/v1/orders/123/actions',
+    headers,
+    payload: {
+      ...command,
+      action: 'setCourierDeliveryRange',
+      data: {
+        address: 'Address',
+        name: 'Test',
+        phone: '+79999999999',
+        startDate: '2026-11-10T12:00:00Z',
+        endDate: '2026-11-10T13:00:00Z',
+        intervalType: 'fixed',
+      },
+    },
+  });
+  expect(send.statusCode).toBe(400);
+  expect(store.enqueue).not.toHaveBeenCalled();
   expect(provider.courier).not.toHaveBeenCalled();
-  expect(
-    (
-      await app.inject({
-        method: 'POST',
-        url: '/api/v1/orders/123/courier-options',
-        headers,
-        payload: { url: 'https://attacker.example' },
-      })
-    ).statusCode,
-  ).toBe(400);
 });
 it('publishes all new routes in OpenAPI', async () => {
   const { app } = await setup();
   const response = await app.inject('/api/v1/openapi.json');
   expect(response.statusCode).toBe(200);
   const doc = response.json<{ paths: Record<string, unknown> }>();
+  expect(doc.paths).not.toHaveProperty('/api/v1/orders/{id}/courier-options');
   for (const path of [
     '/api/v1/orders/{id}/actions',
-    '/api/v1/orders/{id}/courier-options',
     '/api/v1/orders/{id}/actions/{operationId}/label',
     '/api/v1/orders/{id}/actions/{operationId}/label-link',
     '/api/v1/avito-label/download',

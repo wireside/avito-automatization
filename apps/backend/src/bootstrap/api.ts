@@ -231,7 +231,6 @@ export async function createApiRuntime(config: AppConfig) {
         protection,
         config.AVITO_API_CLIENT_ID ?? '',
       ),
-      reader: orderReader,
       writesEnabled: config.AVITO_WRITES_ENABLED,
       provider: createAvitoActionProvider({
         clientId: config.AVITO_API_CLIENT_ID,

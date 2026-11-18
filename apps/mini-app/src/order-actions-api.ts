@@ -43,11 +43,6 @@ export function createOrderActionsApi(initData: string) {
         await request(orderId, 'actions', command)
       ).json() as Promise<unknown>;
     },
-    async courier(orderId: string, address?: string) {
-      return (
-        await request(orderId, 'courier-options', address ? { address } : {})
-      ).json() as Promise<unknown>;
-    },
     async reconcile(orderId: string, id: string) {
       return (
         await request(

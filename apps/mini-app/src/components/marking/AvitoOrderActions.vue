@@ -5,7 +5,6 @@ import {
   avitoActionsResponseSchema,
   avitoActionQueuedSchema,
   avitoActionCommandSchema,
-  courierOptionsSchema,
   type AvitoActionCommandDto,
   type MarketplaceOrderDto,
 } from '@avito/contracts';
@@ -45,9 +44,13 @@ const names: Record<string, string> = {
   fixTrackNumber: 'Исправить трек-номер',
   acceptReturnOrder: 'Выбрать отделение для возврата',
   setCNCDetails: 'Подготовить самовывоз',
-  setCourierDeliveryRange: 'Вызвать курьера',
   label: 'Этикетка PDF',
 };
+const visibleActions = computed(() =>
+  props.order.availableActions.filter(
+    (action) => action.name !== 'setCourierDeliveryRange',
+  ),
+);
 const canWrite = computed(() =>
   props.roles.some((r) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(r)),
 );
@@ -70,16 +73,6 @@ const selected = ref(''),
   error = ref(''),
   message = ref('');
 const fields = reactive<Record<string, string>>({});
-const intervals = ref<
-  {
-    title: string;
-    value: string;
-    startDate: string;
-    endDate: string;
-    type: string;
-  }[]
->([]);
-const interval = ref('');
 let command: AvitoActionCommandDto | undefined;
 const simple = computed(() =>
   ['confirm', 'reject', 'perform'].includes(selected.value),
@@ -88,8 +81,6 @@ function open(action: string) {
   selected.value = action;
   error.value = '';
   command = undefined;
-  interval.value = '';
-  intervals.value = [];
   for (const key of Object.keys(fields)) delete fields[key];
 }
 function payload(): unknown {
@@ -111,23 +102,7 @@ function payload(): unknown {
             }
           : a === 'receive' && fields.confirmCode
             ? { confirmCode: fields.confirmCode }
-            : a === 'setCourierDeliveryRange'
-              ? {
-                  address: fields.address,
-                  addressDetails: fields.addressDetails ?? '',
-                  name: fields.name,
-                  phone: fields.phone,
-                  startDate: intervals.value.find(
-                    (i) => i.value === interval.value,
-                  )?.startDate,
-                  endDate: intervals.value.find(
-                    (i) => i.value === interval.value,
-                  )?.endDate,
-                  intervalType: intervals.value.find(
-                    (i) => i.value === interval.value,
-                  )?.type,
-                }
-              : {};
+            : {};
   return { action: a, data };
 }
 async function send() {
@@ -162,33 +137,6 @@ async function send() {
   } catch (e) {
     error.value =
       e instanceof Error ? e.message : 'Не удалось отправить действие.';
-  } finally {
-    busy.value = false;
-  }
-}
-async function loadIntervals() {
-  busy.value = true;
-  error.value = '';
-  try {
-    const result = courierOptionsSchema.parse(
-      await api.courier(props.order.id, fields.address),
-    );
-    for (const key of ['address', 'addressDetails', 'name', 'phone'] as const)
-      if (!fields[key] && result[key]) fields[key] = result[key];
-    intervals.value = result.dateOptions.flatMap((d) =>
-      d.timeIntervals
-        .filter((i) => ['fixed', 'asap'].includes(i.type))
-        .map((i) => ({
-          ...i,
-          title: `${new Date(d.date).toLocaleDateString('ru-RU')} · ${i.title}`,
-          value: i.startDate + ':' + i.endDate + ':' + i.type,
-        })),
-    );
-    if (!intervals.value.length)
-      error.value = 'Авито пока не вернул доступное время приезда курьера.';
-  } catch (e) {
-    error.value =
-      e instanceof Error ? e.message : 'Не удалось получить время курьера.';
   } finally {
     busy.value = false;
   }
@@ -280,7 +228,7 @@ const status = (s: string) =>
       Действия доступны сотруднику склада и владельцу.
     </p>
     <div class="d-flex flex-column ga-3">
-      <template v-for="a in order.availableActions" :key="a.name">
+      <template v-for="a in visibleActions" :key="a.name">
         <v-btn
           v-if="a.name === 'setMarkings'"
           block
@@ -308,13 +256,6 @@ const status = (s: string) =>
         </p>
       </template>
       <v-btn
-        v-if="['on_confirmation', 'ready_to_ship'].includes(order.status)"
-        :disabled="disabled"
-        block
-        @click="open('setCourierDeliveryRange')"
-        >Вызвать курьера</v-btn
-      >
-      <v-btn
         v-if="
           order.delivery.serviceType === 'pvz' &&
           order.marketplaceId &&
@@ -341,7 +282,14 @@ const status = (s: string) =>
       class="mt-4 text-body-small"
       aria-live="polite"
     >
-      <p>{{ names[op.action] ?? op.action }} · {{ status(op.status) }}</p>
+      <p>
+        {{
+          op.action === 'setCourierDeliveryRange'
+            ? 'Вызов курьера'
+            : (names[op.action] ?? op.action)
+        }}
+        · {{ status(op.status) }}
+      </p>
       <p
         v-if="op.errorCode && op.status === 'MANUAL_ATTENTION'"
         class="text-warning mt-1"
@@ -442,10 +390,7 @@ const status = (s: string) =>
           label="Индекс отделения Почты России"
           :disabled="busy"
         />
-        <template
-          v-if="
-            ['acceptReturnOrder', 'setCourierDeliveryRange'].includes(selected)
-          "
+        <template v-if="selected === 'acceptReturnOrder'"
           ><v-text-field
             v-model="fields.name"
             label="ФИО получателя"
@@ -454,33 +399,17 @@ const status = (s: string) =>
             label="Телефон с кодом страны"
             :disabled="busy"
         /></template>
-        <template
-          v-if="['setCNCDetails', 'setCourierDeliveryRange'].includes(selected)"
+        <template v-if="selected === 'setCNCDetails'"
           ><v-text-field
             v-model="fields.address"
             label="Адрес"
             :disabled="busy" /><v-text-field
-            v-model="fields.addressDetails"
-            label="Уточнение адреса"
-            :disabled="busy"
-        /></template>
-        <template v-if="selected === 'setCNCDetails'"
-          ><v-text-field
             v-model="fields.bookingPeriod"
             type="number"
             label="Срок бронирования, дней"
             :disabled="busy" /><v-text-field
             v-model="fields.details"
             label="Сообщение покупателю"
-            :disabled="busy"
-        /></template>
-        <template v-if="selected === 'setCourierDeliveryRange'"
-          ><v-btn :loading="busy" @click="loadIntervals"
-            >Показать время курьера</v-btn
-          ><v-select
-            v-model="interval"
-            :items="intervals"
-            label="Время приезда"
             :disabled="busy"
         /></template>
         <template v-if="selected === 'receive'"

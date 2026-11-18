@@ -2,9 +2,12 @@ import type { SessionUser } from '../auth/verify-telegram-session.js';
 import { parseClothingMarking, type ScannerProfile } from './parse-marking.js';
 import type { CatalogLookupResult, ReceiptCatalog } from './receipt-catalog.js';
 
+export type StockFilter = 'all' | 'available' | 'reserved';
+
 export interface InventoryQuery {
   warehouseId?: string | undefined;
   search: string;
+  stock?: StockFilter | undefined;
   offset: number;
   limit: number;
 }
@@ -25,7 +28,12 @@ export interface InventoryVariant {
 }
 export interface InventoryPage {
   warehouse: { id: string; name: string };
-  totals: { onHand: number; available: number; quarantine: number };
+  totals: {
+    onHand: number;
+    available: number;
+    reserved: number;
+    quarantine: number;
+  };
   items: InventoryVariant[];
   hasMore: boolean;
 }
@@ -42,6 +50,7 @@ export interface InventoryUnit {
   sizeSystem?: string | null;
   maskedCode: string;
   state: string;
+  stockStatus?: 'available' | 'reserved' | 'other';
   location: string | null;
   receiptId: string;
   receiptNumber: string;
@@ -174,6 +183,7 @@ export function createReadInventory(deps: {
     variantId: string,
     offset: number,
     warehouseId?: string,
+    stock?: StockFilter,
   ) => Promise<{ items: InventoryUnit[]; hasMore: boolean }>;
 }) {
   return {
@@ -186,11 +196,12 @@ export function createReadInventory(deps: {
       variantId: string,
       offset: number,
       warehouseId?: string,
+      stock?: StockFilter,
     ) =>
       canReadStock(user.roles)
         ? {
             ok: true as const,
-            ...(await deps.units(variantId, offset, warehouseId)),
+            ...(await deps.units(variantId, offset, warehouseId, stock)),
           }
         : { ok: false as const, code: 'FORBIDDEN' as const },
   };

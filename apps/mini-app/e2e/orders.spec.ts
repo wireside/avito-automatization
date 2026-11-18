@@ -340,8 +340,9 @@ test('desktop row opens by clicking product and with Enter', async ({
 
 test('takes a real-order snapshot into packing, remembers the exact mapping request after a lost response', async ({
   page,
-}) => {
+}, testInfo) => {
   await setup(page);
+  await page.setViewportSize({ width: 390, height: 860 });
   const variantId = '00000000-0000-4000-8000-000000000090';
   await page.route('**/api/v1/inventory**', (r) =>
     r.fulfill({
@@ -410,13 +411,26 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
   await page
     .getByRole('button', { name: 'Собрать заказ', exact: true })
     .click();
+  await page.getByRole('button', { name: 'Выбрать на складе' }).click();
   await page
-    .getByRole('combobox', {
-      name: 'Вариант на складе — только при первом сопоставлении',
-      exact: true,
-    })
-    .click();
-  await page.getByRole('option').filter({ hasText: '48' }).click();
+    .getByRole('searchbox', { name: 'Поиск позиции на складе' })
+    .fill('48');
+  const searchResponse = page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/v1/inventory?') &&
+      new URL(res.url()).searchParams.get('search') === '48',
+  );
+  await page
+    .getByRole('searchbox', { name: 'Поиск позиции на складе' })
+    .press('Enter');
+  await searchResponse;
+  const results = page.getByRole('button', { name: /Размер 48/ });
+  await expect(results).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath('collection-picker.png'),
+    animations: 'disabled',
+  });
+  await page.getByRole('button', { name: /Размер 48/ }).click();
   await page
     .getByRole('button', { name: 'Начать сборку', exact: true })
     .click();
@@ -578,7 +592,7 @@ test('keeps provider writes disabled on screen when the backend flag is off', as
   ).toBeVisible();
 });
 
-test('sends tracking, return routing, courier interval and label requests through the same order card', async ({
+test('sends tracking, return routing and labels without exposing courier pickup', async ({
   page,
 }) => {
   await setup(page);
@@ -591,6 +605,7 @@ test('sends tracking, return routing, courier interval and label requests throug
           availableActions: [
             { name: 'setTrackNumber', required: true },
             { name: 'acceptReturnOrder', required: false },
+            { name: 'setCourierDeliveryRange', required: true },
           ],
         },
         fetchedAt: new Date().toISOString(),
@@ -611,27 +626,6 @@ test('sends tracking, return routing, courier interval and label requests throug
     }
     return route.fulfill({ json: { writesEnabled: true, operations: [] } });
   });
-  const interval = {
-    date: '2026-11-12T00:00:00Z',
-    timeIntervals: [
-      {
-        startDate: '2026-11-12T10:00:00Z',
-        endDate: '2026-11-12T12:00:00Z',
-        title: '10:00–12:00',
-        type: 'fixed',
-      },
-    ],
-  };
-  await page.route('**/api/v1/orders/*/courier-options', (route) =>
-    route.fulfill({
-      json: {
-        address: 'Адрес склада',
-        name: 'Иван Иванов',
-        phone: '+79999999999',
-        dateOptions: [interval],
-      },
-    }),
-  );
   await page
     .getByRole('button', { name: `Открыть заказ ${firstId}`, exact: true })
     .click();
@@ -641,6 +635,11 @@ test('sends tracking, return routing, courier interval and label requests throug
       exact: true,
     })
     .click();
+  const actions = page.getByTestId('avito-actions');
+  await expect(actions.getByRole('button', { name: /курьер/i })).toHaveCount(0);
+  await expect(
+    actions.getByText('setCourierDeliveryRange', { exact: false }),
+  ).toHaveCount(0);
   const dialog = page.getByRole('dialog');
   await dialog
     .getByRole('textbox', { name: 'Трек-номер', exact: true })
@@ -680,36 +679,13 @@ test('sends tracking, return routing, courier interval and label requests throug
       phone: '+79999999999',
     },
   });
-  await page
-    .getByRole('button', { name: 'Вызвать курьера', exact: true })
-    .click();
-  await dialog.getByRole('button', { name: 'Показать время курьера' }).click();
-  await expect(
-    dialog.getByRole('combobox', { name: 'Время приезда' }),
-  ).toBeEnabled();
-  await dialog.locator('.v-select .v-field').click();
-  await page.getByRole('option').first().click();
-  await dialog
-    .getByRole('button', { name: 'Подтвердить', exact: true })
-    .click();
-  await expect(dialog).not.toBeVisible();
-  expect(commands[2]).toMatchObject({
-    action: 'setCourierDeliveryRange',
-    data: {
-      address: 'Адрес склада',
-      name: 'Иван Иванов',
-      phone: '+79999999999',
-      startDate: interval.timeIntervals[0]!.startDate,
-      endDate: interval.timeIntervals[0]!.endDate,
-      intervalType: 'fixed',
-    },
-  });
   await page.getByRole('button', { name: 'Этикетка PDF', exact: true }).click();
   await dialog
     .getByRole('button', { name: 'Подтвердить', exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
-  expect(commands[3]).toMatchObject({ action: 'label', data: {} });
+  expect(commands[2]).toMatchObject({ action: 'label', data: {} });
+  expect(commands).toHaveLength(3);
 });
 
 for (const client of ['supported', 'unsupported', 'throwing'] as const) {

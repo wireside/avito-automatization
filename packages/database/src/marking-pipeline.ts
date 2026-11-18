@@ -424,6 +424,18 @@ export function createMarkingPipelineStore(
               );
               selected.push(unitId);
             }
+            if (line.rememberVariantForListing === true) {
+              // The channel row is locked by the upsert above. Learn the first
+              // selection only after a successful reservation in this transaction.
+              await tx.execute(
+                sql`INSERT INTO avito_item_variants(item_id,variant_id)
+                    SELECT i.id,${String(line.variantId)}::uuid FROM avito_items i
+                    WHERE i.channel_id=${s(channel, 'id')}
+                    AND i.external_item_id=${String(line.externalLineKey)}
+                    AND NOT EXISTS (SELECT 1 FROM avito_item_variants m
+                      WHERE m.item_id=i.id AND m.archived_at IS NULL)`,
+              );
+            }
           }
           await tx.execute(
             sql`UPDATE orders SET status='RESERVED',last_operation_id=${await header(tx, actorId, 'OTHER', 'pipeline:reserved:' + requestKey)} WHERE id=${orderId}`,

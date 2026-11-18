@@ -730,3 +730,72 @@ test('camera layout uses the design reticle and stops tracks when backgrounded',
     ),
   ).toBe(true);
 });
+
+test('groups confirmed sizes and opens reserved pairs with the same filter', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 860 });
+  await telegram(page);
+  const baseline = pageData(3).items[0]!;
+  const variants = [
+    {
+      ...baseline,
+      id: 'size-48',
+      size: '48',
+      onHand: 2,
+      available: 0,
+      reserved: 2,
+    },
+    { ...baseline, id: 'size-46', size: '46', available: 3, reserved: 0 },
+  ].map((item) => ({
+    ...item,
+    productId: 'same-model',
+    productName: 'Джинсы прямые',
+    article: 'DJ-01',
+    color: 'Синий',
+  }));
+  await page.route('**/api/v1/inventory?*', (route) => {
+    const stock = new URL(route.request().url()).searchParams.get('stock');
+    const items = stock === 'reserved' ? [variants[0]] : variants;
+    return route.fulfill({
+      json: {
+        ...pageData(5),
+        items,
+        totals: { onHand: 5, available: 3, reserved: 2, quarantine: 0 },
+      },
+    });
+  });
+  await page.route('**/api/v1/inventory/variants/size-48/units?*', (route) => {
+    expect(new URL(route.request().url()).searchParams.get('stock')).toBe(
+      'reserved',
+    );
+    return route.fulfill({
+      json: {
+        ok: true,
+        hasMore: false,
+        items: [{ ...unit, state: 'AVAILABLE', stockStatus: 'reserved' }],
+      },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Остатки', exact: true }).click();
+  const stock = page.getByRole('region', { name: 'Товары на складе' });
+  await expect(
+    stock.getByRole('heading', { name: 'Джинсы прямые' }),
+  ).toHaveCount(1);
+  const sizes = stock.getByRole('button', { name: /^Показать экземпляры/ });
+  await expect(sizes.nth(0)).toHaveAccessibleName(/Размер 46/);
+  await expect(sizes.nth(1)).toHaveAccessibleName(/Размер 48/);
+  await page.screenshot({
+    path: testInfo.outputPath('stock-groups.png'),
+    animations: 'disabled',
+  });
+  await stock.getByRole('button', { name: 'В резерве 2', exact: true }).click();
+  await expect(sizes).toHaveCount(1);
+  await sizes.first().click();
+  const dialog = page.getByRole('dialog', { name: 'Экземпляры товара' });
+  await expect(
+    dialog.getByRole('button', { name: 'В резерве', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByText(unit.maskedCode)).toBeVisible();
+});

@@ -439,7 +439,7 @@ test('legal details are loaded only after expanding a unit', async ({
     .getByRole('button', { name: 'Обновить склад', exact: true })
     .click();
   await page
-    .getByRole('button', { name: 'Показать экземпляры', exact: true })
+    .getByRole('button', { name: /^Показать экземпляры:/ })
     .first()
     .click();
   expect(calls).toBe(0);

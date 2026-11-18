@@ -45,33 +45,22 @@ export async function prepareAvitoImport(
       )
     ).rows[0]!;
     const explicit = mappings.find((m) => m.externalItemId === line.avitoId);
-    if (explicit) {
-      const existingMappings = (
-        await db.execute<{ variant_id: string }>(
-          sql`SELECT variant_id FROM avito_item_variants WHERE item_id=${listing.id} AND archived_at IS NULL`,
-        )
-      ).rows;
-      requirePipeline(
-        !existingMappings.length ||
-          existingMappings.every((m) => m.variant_id === explicit.variantId),
-        'LISTING_MAPPING_CONFLICT',
-      );
-      await db.execute(
-        sql`INSERT INTO avito_item_variants(item_id,variant_id) VALUES(${listing.id},${explicit.variantId}) ON CONFLICT DO NOTHING`,
-      );
-    }
     const variants = (
       await db.execute<{ variant_id: string }>(
         sql`SELECT variant_id FROM avito_item_variants WHERE item_id=${listing.id} AND archived_at IS NULL`,
       )
     ).rows;
-    requirePipeline(variants.length === 1, 'ORDER_MAPPING_REQUIRED', [
-      line.avitoId,
-    ]);
+    requirePipeline(
+      explicit || variants.length === 1,
+      'ORDER_MAPPING_REQUIRED',
+      [line.avitoId],
+    );
+    const variantId = explicit?.variantId ?? variants[0]!.variant_id;
     requirePipeline(line.priceMinor !== null, 'SALE_PRICE_REQUIRED');
     lines.push({
       externalLineKey: line.avitoId,
-      variantId: variants[0]!.variant_id,
+      variantId,
+      ...(explicit ? { rememberVariantForListing: true } : {}),
       quantity: line.quantity,
       unitPriceKopecks: line.priceMinor,
     });

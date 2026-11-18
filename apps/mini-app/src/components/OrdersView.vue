@@ -264,9 +264,7 @@ const statusColor = (value: string) =>
                         o.items.length > 1 ? ` + ещё ${o.items.length - 1}` : ''
                       }}
                     </p>
-                    <p class="text-body-medium mt-1">
-                      {{ quantity(o) }} шт. · вариант не сопоставлен
-                    </p>
+                    <p class="text-body-medium mt-1">{{ quantity(o) }} шт.</p>
                     <p class="text-body-small text-secondary mt-1">
                       Объявление {{ o.items[0]?.avitoId }}
                     </p>
@@ -325,11 +323,9 @@ const statusColor = (value: string) =>
                 {{ o.items[0]?.title ?? 'Без товаров'
                 }}{{ o.items.length > 1 ? ` + ещё ${o.items.length - 1}` : '' }}
               </p>
-              <p class="text-body-medium mt-1">
-                {{ quantity(o) }} шт. · вариант не сопоставлен
-              </p>
+              <p class="text-body-medium mt-1">{{ quantity(o) }} шт.</p>
               <p class="text-body-small text-secondary mt-1">
-                Объявление {{ o.items[0]?.avitoId }} · без резерва
+                Объявление {{ o.items[0]?.avitoId }}
               </p>
             </div>
           </div>

@@ -7,6 +7,7 @@ import type {
   ReceiptCommand,
   ReceiptResult,
   InventoryVariant,
+  StockFilter,
 } from '@avito/domain';
 import type { Database } from './client.js';
 import { canEnrichIntakeVariant, requirePipeline } from '@avito/domain';
@@ -26,19 +27,29 @@ import {
   warehouses,
 } from './schema.js';
 
-const unitSelect = sql`SELECT u.id, u.internal_code AS "internalCode", u.variant_id AS "variantId", v.name,
+const selectUnit = (
+  withAvailability = false,
+) => sql`SELECT u.id, u.internal_code AS "internalCode", u.variant_id AS "variantId", v.name,
  coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
  v.color, v.size_label AS size, v.size_system AS "sizeSystem",
  m.masked_code AS "maskedCode", u.current_state AS state, l.name AS location,
  coalesce(l.warehouse_id,r.warehouse_id) AS "warehouseId", uw.name AS "warehouseName",
  r.id AS "receiptId", r.number AS "receiptNumber", r.received_at AS "receivedAt"
+ ${
+   withAvailability
+     ? sql`, CASE WHEN av.reservation_id IS NOT NULL THEN 'reserved'
+   WHEN av.is_eligible THEN 'available' ELSE 'other' END AS "stockStatus"`
+     : sql``
+ }
  FROM product_units u JOIN product_variants v ON v.id=u.variant_id
  LEFT JOIN products p ON p.id=v.product_id
  JOIN cost_layers c ON c.id=u.cost_layer_id JOIN stock_receipt_items ri ON ri.id=c.receipt_item_id
  JOIN stock_receipts r ON r.id=ri.receipt_id
  JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL
  LEFT JOIN stock_locations l ON l.id=u.current_location_id
- JOIN warehouses uw ON uw.id=coalesce(l.warehouse_id,r.warehouse_id)`;
+ JOIN warehouses uw ON uw.id=coalesce(l.warehouse_id,r.warehouse_id)
+ ${withAvailability ? sql`JOIN stock_unit_availability av ON av.unit_id=u.id` : sql``}`;
+const unitSelect = selectUnit();
 type UnitRow = Omit<InventoryUnit, 'receivedAt'> & { receivedAt: string };
 const mapUnit = (row: UnitRow): InventoryUnit => ({
   ...row,
@@ -455,8 +466,9 @@ export function createInventoryStore(db: Database) {
                 onHand: number;
                 available: number;
                 quarantine: number;
+                reserved: number;
               }>(
-                sql`SELECT coalesce(sum(on_hand),0)::int AS "onHand", coalesce(sum(available),0)::int AS available, coalesce(sum(quarantine),0)::int AS quarantine FROM stock_balances WHERE warehouse_id=${warehouse.id}`,
+                sql`SELECT coalesce(sum(on_hand),0)::int AS "onHand", coalesce(sum(available),0)::int AS available, coalesce(sum(quarantine),0)::int AS quarantine, coalesce(sum(reserved),0)::int AS reserved FROM stock_balances WHERE warehouse_id=${warehouse.id}`,
               )
             ).rows,
           );
@@ -471,7 +483,14 @@ export function createInventoryStore(db: Database) {
       sum(b.reserved)::int AS reserved, sum(b.defective)::int AS defective
       FROM stock_balances b JOIN product_variants v ON v.id=b.variant_id LEFT JOIN products p ON p.id=v.product_id
       WHERE b.warehouse_id=${warehouse.id} AND (v.name ILIKE ${pattern} OR v.sku ILIKE ${pattern} OR p.name ILIKE ${pattern} OR coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') ILIKE ${pattern} OR v.size_label ILIKE ${pattern} OR v.color ILIKE ${pattern} OR EXISTS(SELECT 1 FROM variant_identifiers vi WHERE vi.variant_id=v.id AND vi.gtin ILIKE ${pattern}))
-      GROUP BY v.id,p.id ORDER BY coalesce(p.name,v.name),v.size_label NULLS LAST,v.color NULLS LAST,v.id
+      GROUP BY v.id,p.id
+      HAVING CASE ${query.stock ?? 'all'}
+        WHEN 'available' THEN sum(b.available) > 0
+        WHEN 'reserved' THEN sum(b.reserved) > 0
+        ELSE true END
+      ORDER BY coalesce(p.name,v.name),
+        (CASE WHEN p.id IS NOT NULL THEN p.manufacturer_article ELSE v.attributes->'intakeCatalog'->>'article' END) NULLS LAST,
+        coalesce(p.id,v.id),v.size_label NULLS LAST,v.color NULLS LAST,v.id
       LIMIT ${query.limit + 1} OFFSET ${query.offset}`)
           ).rows;
           return {
@@ -484,10 +503,24 @@ export function createInventoryStore(db: Database) {
         { isolationLevel: 'repeatable read', accessMode: 'read only' },
       );
     },
-    async units(variantId: string, offset: number, warehouseId?: string) {
+    async units(
+      variantId: string,
+      offset: number,
+      warehouseId?: string,
+      stock: StockFilter = 'all',
+    ) {
       const rows = (
         await db.execute<UnitRow>(
-          sql`${unitSelect} JOIN warehouses w ON w.id=l.warehouse_id WHERE u.variant_id=${variantId} AND (${warehouseId ?? null}::uuid IS NOT NULL AND w.id=${warehouseId ?? null}::uuid OR ${warehouseId ?? null}::uuid IS NULL AND w.code='MAIN') AND w.archived_at IS NULL ORDER BY r.received_at DESC,u.id LIMIT 21 OFFSET ${offset}`,
+          sql`${selectUnit(true)}
+          WHERE u.variant_id=${variantId}
+            AND (${warehouseId ?? null}::uuid IS NOT NULL AND uw.id=${warehouseId ?? null}::uuid
+              OR ${warehouseId ?? null}::uuid IS NULL AND uw.code='MAIN')
+            AND uw.archived_at IS NULL AND av.warehouse_id=uw.id
+            AND CASE ${stock}
+              WHEN 'available' THEN av.is_eligible AND av.reservation_id IS NULL
+              WHEN 'reserved' THEN av.reservation_id IS NOT NULL
+              ELSE true END
+          ORDER BY r.received_at DESC,u.id LIMIT 21 OFFSET ${offset}`,
         )
       ).rows;
       return {

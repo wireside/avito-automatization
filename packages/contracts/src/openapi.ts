@@ -4,7 +4,6 @@ import {
   avitoActionsResponseSchema,
   avitoActionQueuedSchema,
   avitoLabelLinkSchema,
-  courierOptionsSchema,
 } from './order-actions.js';
 import {
   signingOpenApiPaths,
@@ -379,29 +378,6 @@ function orderActionPaths() {
           },
         },
         responses: response(avitoActionQueuedSchema),
-      },
-    },
-    '/api/v1/orders/{id}/courier-options': {
-      post: {
-        operationId: 'getAvitoCourierOptions',
-        tags: ['Orders'],
-        security,
-        parameters: [id],
-        description:
-          'Read-only provider request. Address is in the body to keep it out of access logs.',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: { address: { type: 'string', maxLength: 500 } },
-                additionalProperties: false,
-              },
-            },
-          },
-        },
-        responses: response(courierOptionsSchema),
       },
     },
     '/api/v1/orders/{id}/actions/{operationId}/reconcile': {

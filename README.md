@@ -99,4 +99,4 @@ pnpm test:e2e                          # после сборки frontend
 - `packages/domain` — бизнес-сценарии и правила; `packages/database` — SQL и миграции; `packages/contracts` — DTO, Zod и OpenAPI.
 - `packages/integrations`, `queue`, `observability` — клиенты провайдеров, фоновые задания и логирование.
 
-[Спецификация проекта](PROJECT_SPEC.md) · [Экраны и сценарии](docs/marking-pipeline-frontend.md) · [Контракты Авито](docs/openapi/avito/index.json) · [Контракты ЧЗ](docs/chz/README.md) · [Развёртывание](docs/deployment.md)
+[Контракты Авито](docs/openapi/avito/index.json) · [Контракты ЧЗ](docs/chz/README.md) · [Развёртывание](docs/deployment.md)

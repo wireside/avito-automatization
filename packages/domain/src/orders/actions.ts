@@ -127,7 +127,6 @@ export function avitoActionObserved(
 }
 export function createAvitoOrderActions(deps: {
   store: AvitoActionStore;
-  reader: OrderReader;
   provider: AvitoActionProvider;
   writesEnabled: boolean;
 }) {
@@ -153,14 +152,6 @@ export function createAvitoOrderActions(deps: {
       requirePipeline(canWrite(user), 'FORBIDDEN');
       await deps.store.reconcile(id, orderId);
       return { operationId: id };
-    },
-    async courier(user: SessionUser, id: string, address?: string) {
-      requirePipeline(canWrite(user), 'FORBIDDEN');
-      assertAvitoActionAvailable(
-        await readCurrentOrder(deps.reader, id),
-        'setCourierDeliveryRange',
-      );
-      return deps.provider.courier(id, address);
     },
     async download(user: SessionUser, orderId: string, id: string) {
       requirePipeline(canRead(user), 'FORBIDDEN');
