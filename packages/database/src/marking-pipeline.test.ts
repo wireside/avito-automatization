@@ -205,14 +205,15 @@ const url =
           },
         }),
     });
-    async function fixture() {
-      const prefix = '04660430' + String(20000 + serial++),
+    async function fixture(existingGtin?: string) {
+      const sequence = serial++;
+      const prefix = '04660430' + String(20000 + sequence),
         sum = [...prefix].reduce(
           (n, d, i) => n + Number(d) * (i % 2 === 0 ? 3 : 1),
           0,
         ),
-        gtin = prefix + ((10 - (sum % 10)) % 10),
-        cis = '01' + gtin + '21TEST000000001',
+        gtin = existingGtin ?? prefix + ((10 - (sum % 10)) % 10),
+        cis = '01' + gtin + '21TEST' + String(sequence + 1).padStart(9, '0'),
         raw = cis + '\u001d91ABCD\u001d92' + 'A'.repeat(44);
       const r = await receive(actor, {
         requestId: randomUUID(),
@@ -494,6 +495,45 @@ const url =
       ).toMatchObject({
         items: [{ variantId: first.variantId }],
       });
+    });
+    it('marks a withdrawn pair in the free stock and reserves only the pair in circulation', async () => {
+      const saleable = await fixture();
+      const withdrawn = await fixture(saleable.gtin);
+      codes.set(withdrawn.cis, {
+        ...codes.get(withdrawn.cis)!,
+        status: 'RETIRED',
+        observedAt: new Date().toISOString(),
+      });
+      await command('check', { unitId: withdrawn.unitId });
+      await drain();
+
+      const query = {
+        search: saleable.gtin,
+        offset: 0,
+        limit: 20,
+        warehouseId,
+      };
+      expect((await inventory.list(query)).items).toMatchObject([
+        { onHand: 2, available: 2, readyToCollect: 1, withdrawn: 1 },
+      ]);
+      const units = await inventory.units(saleable.variantId, 0, warehouseId);
+      expect(units.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: saleable.unitId, withdrawn: false }),
+          expect.objectContaining({ id: withdrawn.unitId, withdrawn: true }),
+        ]),
+      );
+      await shipment(saleable);
+      expect(
+        (await inventory.units(saleable.variantId, 0, warehouseId, 'reserved'))
+          .items,
+      ).toMatchObject([{ id: saleable.unitId }]);
+      expect((await inventory.list(query)).items).toMatchObject([
+        { onHand: 2, available: 1, readyToCollect: 0, withdrawn: 1 },
+      ]);
+      await expect(shipment(withdrawn)).rejects.toThrow(
+        'INSUFFICIENT_LEGAL_STOCK',
+      );
     });
     it('does not reserve a code whose provider owner differs', async () => {
       const f = await fixture();

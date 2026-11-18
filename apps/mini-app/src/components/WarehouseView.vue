@@ -74,7 +74,7 @@ const metrics = computed(() => [
       ]
     : []),
   {
-    label: 'Доступно на складе',
+    label: 'Свободно на складе',
     value: totals.value?.available,
     color: 'success',
     icon: 'check' as const,

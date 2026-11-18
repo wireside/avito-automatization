@@ -52,6 +52,8 @@ function pageData(count: number) {
             gtins: [gtin],
             onHand: count,
             available: count,
+            readyToCollect: count,
+            withdrawn: 0,
             quarantine: 0,
             reserved: 0,
             defective: 0,
@@ -744,6 +746,8 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
       size: '48',
       onHand: 2,
       available: 0,
+      readyToCollect: 0,
+      withdrawn: 1,
       reserved: 2,
     },
     { ...baseline, id: 'size-46', size: '46', available: 3, reserved: 0 },
@@ -773,7 +777,14 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
       json: {
         ok: true,
         hasMore: false,
-        items: [{ ...unit, state: 'AVAILABLE', stockStatus: 'reserved' }],
+        items: [
+          {
+            ...unit,
+            state: 'AVAILABLE',
+            stockStatus: 'reserved',
+            withdrawn: true,
+          },
+        ],
       },
     });
   });
@@ -786,6 +797,7 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
   const sizes = stock.getByRole('button', { name: /^Показать экземпляры/ });
   await expect(sizes.nth(0)).toHaveAccessibleName(/Размер 46/);
   await expect(sizes.nth(1)).toHaveAccessibleName(/Размер 48/);
+  await expect(sizes.nth(1)).toContainText('Выведено из оборота: 1');
   await page.screenshot({
     path: testInfo.outputPath('stock-groups.png'),
     animations: 'disabled',
@@ -798,4 +810,7 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
     dialog.getByRole('button', { name: 'В резерве', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
   await expect(dialog.getByText(unit.maskedCode)).toBeVisible();
+  await expect(
+    dialog.getByText('Выведен из оборота', { exact: true }),
+  ).toBeVisible();
 });

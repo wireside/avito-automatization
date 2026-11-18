@@ -9,6 +9,7 @@ import {
   type PipelineStore,
 } from '@avito/domain';
 import { connectedSellerInn } from './warehouses.js';
+import { latestTrueApiMarking, readyToCollect } from './stock-collection.js';
 import type { Database } from './client.js';
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Row = Record<string, unknown>;
@@ -92,7 +93,7 @@ async function unit(tx: Tx | Database, id: string, lock = false) {
     ms.state AS legal_state,ms.ownership_verified,ms.observed_at,
     EXISTS(SELECT 1 FROM marking_supply_evidence e WHERE e.unit_id=u.id AND e.verified_at IS NOT NULL) AS received_legally,
     EXISTS(SELECT 1 FROM chz_operations co WHERE co.marking_id=m.id AND co.status IN ${active}) AS pending
-    FROM product_units u JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL LEFT JOIN stock_locations l ON l.id=u.current_location_id LEFT JOIN LATERAL (SELECT state,ownership_verified,observed_at FROM unit_marking_events WHERE marking_id=m.id AND source='TRUE_API' ORDER BY observed_at DESC,id DESC LIMIT 1) ms ON true WHERE u.id=${id}`,
+    FROM product_units u JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL LEFT JOIN stock_locations l ON l.id=u.current_location_id ${latestTrueApiMarking} WHERE u.id=${id}`,
   );
 }
 function blockers(u: Row) {
@@ -394,7 +395,13 @@ export function createMarkingPipelineStore(
             );
             const candidates = await rows(
               tx,
-              sql`SELECT u.id FROM product_units u JOIN stock_unit_availability av ON av.unit_id=u.id JOIN LATERAL (SELECT me.state,me.ownership_verified,me.observed_at FROM unit_marking_events me JOIN unit_markings m ON m.id=me.marking_id WHERE m.unit_id=u.id AND m.retired_at IS NULL AND me.source='TRUE_API' ORDER BY me.observed_at DESC,me.id DESC LIMIT 1) ms ON true JOIN marking_supply_evidence e ON e.unit_id=u.id WHERE u.variant_id=${String(line.variantId)} AND av.warehouse_id=${warehouseId} AND av.is_eligible AND av.reservation_id IS NULL AND e.verified_at IS NOT NULL AND ms.state='IN_CIRCULATION' AND ms.ownership_verified='VERIFIED' AND ms.observed_at>now()-interval '15 minutes' ORDER BY u.id FOR UPDATE OF u`,
+              sql`SELECT u.id FROM product_units u
+                JOIN stock_unit_availability av ON av.unit_id = u.id
+                JOIN unit_markings m ON m.unit_id = u.id AND m.retired_at IS NULL
+                ${latestTrueApiMarking}
+                WHERE av.variant_id = ${String(line.variantId)}
+                  AND av.warehouse_id = ${warehouseId} AND ${readyToCollect}
+                ORDER BY u.id FOR UPDATE OF u`,
             );
             requirePipeline(
               candidates.length >= Number(line.quantity),

@@ -5,6 +5,7 @@ import { inventoryPageResponseSchema } from '@avito/contracts';
 import { createInventoryApi, type StockVariant } from '../../inventory-api';
 import { groupStock, stockVariantLabel } from '../../stock-display';
 import DesignIcon from '../DesignIcon.vue';
+import { layout } from '../../design/tokens';
 
 const props = defineProps<{
   initData: string;
@@ -30,7 +31,6 @@ const stock = useInfiniteQuery({
       search: appliedSearch.value,
       offset: String(pageParam),
       limit: String(pageSize),
-      stock: 'available',
     });
     if (props.warehouseId) params.set('warehouseId', props.warehouseId);
     return inventoryPageResponseSchema.parse(
@@ -41,6 +41,7 @@ const stock = useInfiniteQuery({
   getNextPageParam: (last, pages) =>
     last.hasMore ? pages.length * pageSize : undefined,
   staleTime: 0,
+  refetchInterval: layout.pollingInterval,
   retry: false,
 });
 const groups = computed(() =>
@@ -90,8 +91,8 @@ const groups = computed(() =>
     <p v-else-if="!groups.length" class="text-body-medium text-secondary py-3">
       {{
         appliedSearch
-          ? 'По запросу нет доступных позиций.'
-          : 'На выбранном складе нет доступных позиций.'
+          ? 'По запросу ничего не найдено.'
+          : 'На выбранном складе нет позиций.'
       }}
     </p>
     <v-card
@@ -111,9 +112,9 @@ const groups = computed(() =>
         <v-divider />
         <button
           type="button"
-          class="picker-row d-flex justify-space-between align-center ga-3 px-3 py-2"
+          class="picker-row px-3 py-2"
           :aria-pressed="selectedId === item.id"
-          :disabled="item.available < quantity"
+          :disabled="item.readyToCollect < quantity"
           @click="emit('select', item)"
         >
           <span class="min-w-0 picker-wrap">
@@ -129,13 +130,23 @@ const groups = computed(() =>
           <span
             class="text-body-small flex-shrink-0 text-right"
             :class="
-              item.available < quantity ? 'text-secondary' : 'text-success'
+              item.readyToCollect < quantity ? 'text-secondary' : 'text-success'
             "
           >
-            Доступно {{ item.available }}
-            <span v-if="item.available < quantity" class="d-block"
-              >Недостаточно</span
-            >
+            К сборке: {{ item.readyToCollect }}
+            <span v-if="item.readyToCollect < quantity" class="d-block">
+              {{
+                item.available < quantity
+                  ? 'Мало свободных пар'
+                  : 'Мало пар для резерва'
+              }}
+            </span>
+          </span>
+          <span
+            v-if="item.withdrawn"
+            class="picker-withdrawn text-body-small text-warning"
+          >
+            Выведено из оборота: {{ item.withdrawn }}
           </span>
         </button>
       </template>
@@ -173,6 +184,10 @@ const groups = computed(() =>
   overflow-wrap: anywhere;
 }
 .picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
   appearance: none;
   border: 0;
   background: transparent;
@@ -180,6 +195,9 @@ const groups = computed(() =>
   width: 100%;
   text-align: left;
   color: rgb(var(--v-theme-on-surface));
+}
+.picker-withdrawn {
+  grid-column: 1 / -1;
 }
 .picker-row:enabled:hover,
 .picker-row[aria-pressed='true'] {

@@ -41,10 +41,11 @@ const units = useQuery({
       signal,
     ),
   retry: false,
+  refetchInterval: layout.pollingInterval,
 });
 const states: Record<string, string> = {
   QUARANTINE: 'Карантин',
-  AVAILABLE: 'Доступен',
+  AVAILABLE: 'Свободен на складе',
   RESERVED: 'В резерве',
   PACKING: 'Упаковка',
   IN_TRANSIT: 'В пути',
@@ -99,36 +100,45 @@ const date = (value: string) =>
         class="pa-4 mb-3"
       >
         <div class="d-flex justify-space-between align-start ga-3 flex-wrap">
-          <strong class="text-title-small">{{ unit.maskedCode }}</strong
-          ><v-chip
-            :color="
-              (
-                unit.stockStatus
-                  ? unit.stockStatus === 'available'
-                  : unit.state === 'AVAILABLE'
-              )
-                ? 'success-soft'
-                : 'warning-soft'
-            "
-            :class="
-              (
-                unit.stockStatus
-                  ? unit.stockStatus === 'available'
-                  : unit.state === 'AVAILABLE'
-              )
-                ? 'text-success'
-                : 'text-warning'
-            "
-            >{{
-              unit.stockStatus === 'reserved'
-                ? unit.state === 'PACKING'
-                  ? 'В резерве · упаковка'
-                  : 'В резерве'
-                : unit.stockStatus === 'other' && unit.state === 'AVAILABLE'
-                  ? 'Недоступен'
-                  : (states[unit.state] ?? 'Требует уточнения')
-            }}</v-chip
-          >
+          <strong class="text-title-small">{{ unit.maskedCode }}</strong>
+          <span class="d-flex ga-2 flex-wrap">
+            <v-chip
+              :color="
+                (
+                  unit.stockStatus
+                    ? unit.stockStatus === 'available'
+                    : unit.state === 'AVAILABLE'
+                )
+                  ? 'success-soft'
+                  : 'warning-soft'
+              "
+              :class="
+                (
+                  unit.stockStatus
+                    ? unit.stockStatus === 'available'
+                    : unit.state === 'AVAILABLE'
+                )
+                  ? 'text-success'
+                  : 'text-warning'
+              "
+              >{{
+                unit.stockStatus === 'reserved'
+                  ? unit.state === 'PACKING'
+                    ? 'В резерве · упаковка'
+                    : 'В резерве'
+                  : unit.stockStatus === 'other' && unit.state === 'AVAILABLE'
+                    ? 'Недоступен'
+                    : (states[unit.state] ?? 'Требует уточнения')
+              }}</v-chip
+            >
+            <v-chip
+              v-if="unit.withdrawn"
+              color="warning-soft"
+              class="text-warning"
+            >
+              Выведен из оборота
+            </v-chip>
+          </span>
         </div>
         <p class="text-body-small text-secondary mt-2">
           {{ unit.location ?? 'Место не указано' }}

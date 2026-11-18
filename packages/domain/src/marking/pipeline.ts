@@ -40,6 +40,8 @@ export interface PipelineSnapshot {
   observedAt: string | null;
   pending: boolean;
 }
+export const legalObservationMaxAgeMs = 15 * 60_000;
+
 export function legalBlockers(unit: PipelineSnapshot, now: Date): string[] {
   const blockers: string[] = [];
   if (!unit.receivedLegally) blockers.push('SUPPLY_NOT_CONFIRMED');
@@ -48,7 +50,7 @@ export function legalBlockers(unit: PipelineSnapshot, now: Date): string[] {
   if (unit.ownership !== 'VERIFIED') blockers.push('OWNERSHIP_NOT_VERIFIED');
   if (
     !unit.observedAt ||
-    now.getTime() - Date.parse(unit.observedAt) > 15 * 60_000 ||
+    now.getTime() - Date.parse(unit.observedAt) > legalObservationMaxAgeMs ||
     Date.parse(unit.observedAt) > now.getTime()
   )
     blockers.push('LEGAL_CHECK_STALE');

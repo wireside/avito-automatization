@@ -25,7 +25,7 @@ const filters = computed(() => [
   { key: 'all' as const, label: 'Все', count: props.data?.totals.onHand },
   {
     key: 'available' as const,
-    label: 'Доступно',
+    label: 'Свободно',
     count: props.data?.totals.available,
   },
   {
@@ -98,7 +98,7 @@ const filters = computed(() => [
           : filter === 'reserved'
             ? 'На этом складе нет пар в резерве.'
             : filter === 'available'
-              ? 'На этом складе нет доступных пар.'
+              ? 'На этом складе нет свободных пар.'
               : 'На складе пока пусто.'
       }}
     </p>
@@ -120,7 +120,7 @@ const filters = computed(() => [
         <button
           type="button"
           class="stock-variant px-4 py-3"
-          :aria-label="`Показать экземпляры: ${group.name}, ${stockVariantLabel(item)}, доступно ${item.available}, в резерве ${item.reserved}`"
+          :aria-label="`Показать экземпляры: ${group.name}, ${stockVariantLabel(item)}, свободно ${item.available}, к сборке ${item.readyToCollect}, в резерве ${item.reserved}${item.withdrawn ? `, выведено из оборота ${item.withdrawn}` : ''}`"
           @click="emit('units', item.id)"
         >
           <span class="min-w-0 stock-wrap">
@@ -134,13 +134,21 @@ const filters = computed(() => [
             >
           </span>
           <span class="stock-counts text-body-small">
-            <span class="text-success">Доступно {{ item.available }}</span>
+            <span class="text-secondary">Свободно {{ item.available }}</span>
+            <span
+              :class="item.readyToCollect ? 'text-success' : 'text-secondary'"
+            >
+              К сборке {{ item.readyToCollect }}
+            </span>
             <span :class="item.reserved ? 'text-warning' : 'text-secondary'"
               >В резерве {{ item.reserved }}</span
             >
             <span class="text-secondary"
               >Всего <span>{{ item.onHand }} шт.</span></span
             >
+            <span v-if="item.withdrawn" class="text-warning">
+              Выведено из оборота: {{ item.withdrawn }}
+            </span>
             <span v-if="item.defective" class="text-error"
               >Брак {{ item.defective }}</span
             >

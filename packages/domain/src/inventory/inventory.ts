@@ -22,6 +22,8 @@ export interface InventoryVariant {
   gtins: string[];
   onHand: number;
   available: number;
+  readyToCollect: number;
+  withdrawn: number;
   quarantine: number;
   reserved: number;
   defective: number;
@@ -51,6 +53,7 @@ export interface InventoryUnit {
   maskedCode: string;
   state: string;
   stockStatus?: 'available' | 'reserved' | 'other';
+  withdrawn?: boolean;
   location: string | null;
   receiptId: string;
   receiptNumber: string;

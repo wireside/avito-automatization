@@ -93,6 +93,8 @@ suite('catalog-backed warehouse receipt without review', () => {
     expect(page.items[0]).toMatchObject({
       onHand: 1,
       available: 1,
+      readyToCollect: 0,
+      withdrawn: 0,
       quarantine: 0,
     });
     expect(page.items[0]).not.toHaveProperty('reviewStatus');

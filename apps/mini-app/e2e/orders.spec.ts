@@ -352,7 +352,7 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
           id: '00000000-0000-4000-8000-000000000030',
           name: 'Склад',
         },
-        totals: { onHand: 1, available: 1, quarantine: 0 },
+        totals: { onHand: 3, available: 3, quarantine: 0 },
         items: [
           {
             id: variantId,
@@ -365,6 +365,25 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
             gtins: ['04660430764543'],
             onHand: 1,
             available: 1,
+            readyToCollect: 1,
+            withdrawn: 0,
+            quarantine: 0,
+            reserved: 0,
+            defective: 0,
+          },
+          {
+            id: '00000000-0000-4000-8000-000000000091',
+            productId: null,
+            productName: null,
+            article: null,
+            name: 'Джинсы прямые',
+            size: '50',
+            color: 'Синий',
+            gtins: ['04660430764550'],
+            onHand: 2,
+            available: 2,
+            readyToCollect: 0,
+            withdrawn: 2,
             quarantine: 0,
             reserved: 0,
             defective: 0,
@@ -425,7 +444,12 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
     .press('Enter');
   await searchResponse;
   const results = page.getByRole('button', { name: /Размер 48/ });
-  await expect(results).toBeVisible();
+  await expect(results).toBeEnabled();
+  await expect(results).toContainText('К сборке: 1');
+  const unavailable = page.getByRole('button', { name: /Размер 50/ });
+  await expect(unavailable).toBeDisabled();
+  await expect(unavailable).toContainText('Выведено из оборота: 2');
+  await expect(unavailable).toContainText('К сборке: 0');
   await page.screenshot({
     path: testInfo.outputPath('collection-picker.png'),
     animations: 'disabled',

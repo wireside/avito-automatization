@@ -382,6 +382,8 @@ test('legal details are loaded only after expanding a unit', async ({
             gtins: ['04660430764543'],
             onHand: 1,
             available: 1,
+            readyToCollect: 1,
+            withdrawn: 0,
             quarantine: 0,
             reserved: 0,
             defective: 0,

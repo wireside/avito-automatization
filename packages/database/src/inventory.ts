@@ -10,6 +10,7 @@ import type {
   StockFilter,
 } from '@avito/domain';
 import type { Database } from './client.js';
+import { latestTrueApiMarking, readyToCollect } from './stock-collection.js';
 import { canEnrichIntakeVariant, requirePipeline } from '@avito/domain';
 import {
   costLayers,
@@ -38,7 +39,8 @@ const selectUnit = (
  ${
    withAvailability
      ? sql`, CASE WHEN av.reservation_id IS NOT NULL THEN 'reserved'
-   WHEN av.is_eligible THEN 'available' ELSE 'other' END AS "stockStatus"`
+   WHEN av.is_eligible THEN 'available' ELSE 'other' END AS "stockStatus",
+   (ms.state = 'WITHDRAWN') IS TRUE AS withdrawn`
      : sql``
  }
  FROM product_units u JOIN product_variants v ON v.id=u.variant_id
@@ -48,7 +50,7 @@ const selectUnit = (
  JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL
  LEFT JOIN stock_locations l ON l.id=u.current_location_id
  JOIN warehouses uw ON uw.id=coalesce(l.warehouse_id,r.warehouse_id)
- ${withAvailability ? sql`JOIN stock_unit_availability av ON av.unit_id=u.id` : sql``}`;
+ ${withAvailability ? sql`JOIN stock_unit_availability av ON av.unit_id=u.id ${latestTrueApiMarking}` : sql``}`;
 const unitSelect = selectUnit();
 type UnitRow = Omit<InventoryUnit, 'receivedAt'> & { receivedAt: string };
 const mapUnit = (row: UnitRow): InventoryUnit => ({
@@ -475,7 +477,7 @@ export function createInventoryStore(db: Database) {
           const pattern = `%${query.search.replace(/[\\%_]/g, '\\$&')}%`;
           const rows = (
             await tx.execute<
-              InventoryVariant & Record<string, unknown>
+              Omit<InventoryVariant, 'readyToCollect' | 'withdrawn'>
             >(sql`SELECT v.id, v.product_id AS "productId", p.name AS "productName", coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
       v.name, v.size_label AS size, v.color,
       ARRAY(SELECT gtin FROM variant_identifiers WHERE variant_id=v.id ORDER BY gtin) AS gtins,
@@ -493,10 +495,42 @@ export function createInventoryStore(db: Database) {
         coalesce(p.id,v.id),v.size_label NULLS LAST,v.color NULLS LAST,v.id
       LIMIT ${query.limit + 1} OFFSET ${query.offset}`)
           ).rows;
+          const page = rows.slice(0, query.limit);
+          const inventoryCounts = page.length
+            ? (
+                await tx.execute<{
+                  id: string;
+                  readyToCollect: number;
+                  withdrawn: number;
+                }>(sql`
+                SELECT av.variant_id AS id,
+                  count(*) FILTER (WHERE ${readyToCollect})::int AS "readyToCollect",
+                  count(*) FILTER (WHERE ms.state = 'WITHDRAWN')::int AS withdrawn
+                FROM stock_unit_availability av
+                LEFT JOIN unit_markings m ON m.unit_id = av.unit_id AND m.retired_at IS NULL
+                ${latestTrueApiMarking}
+                WHERE av.warehouse_id = ${warehouse.id}
+                  AND av.variant_id IN (${sql.join(
+                    page.map((variant) => sql`${variant.id}`),
+                    sql`, `,
+                  )})
+                GROUP BY av.variant_id
+              `)
+              ).rows
+            : [];
+          const countsByVariant = new Map(
+            inventoryCounts.map(({ id, ...counts }) => [id, counts]),
+          );
           return {
             warehouse,
             totals,
-            items: rows.slice(0, query.limit),
+            items: page.map((variant) => ({
+              ...variant,
+              ...(countsByVariant.get(variant.id) ?? {
+                readyToCollect: 0,
+                withdrawn: 0,
+              }),
+            })),
             hasMore: rows.length > query.limit,
           };
         },
