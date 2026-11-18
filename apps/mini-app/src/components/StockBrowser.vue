@@ -120,7 +120,7 @@ const filters = computed(() => [
         <button
           type="button"
           class="stock-variant px-4 py-3"
-          :aria-label="`Показать экземпляры: ${group.name}, ${stockVariantLabel(item)}, свободно ${item.available}, к сборке ${item.readyToCollect}, в резерве ${item.reserved}${item.withdrawn ? `, выведено из оборота ${item.withdrawn}` : ''}`"
+          :aria-label="`Показать экземпляры: ${group.name}, ${stockVariantLabel(item)}, свободно ${item.available}, к сборке ${item.readyToCollect}, в резерве ${item.reserved}${item.withdrawn ? `, выведено из оборота ${item.withdrawn}` : ''}${item.unchecked ? `, статус ЧЗ не проверен ${item.unchecked}` : ''}`"
           @click="emit('units', item.id)"
         >
           <span class="min-w-0 stock-wrap">
@@ -148,6 +148,9 @@ const filters = computed(() => [
             >
             <span v-if="item.withdrawn" class="text-warning">
               Выведено из оборота: {{ item.withdrawn }}
+            </span>
+            <span v-if="item.unchecked" class="text-secondary">
+              Статус ЧЗ не проверен: {{ item.unchecked }}
             </span>
             <span v-if="item.defective" class="text-error"
               >Брак {{ item.defective }}</span

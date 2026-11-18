@@ -205,7 +205,7 @@ const url =
           },
         }),
     });
-    async function fixture(existingGtin?: string) {
+    async function fixture(existingGtin?: string, supply = true) {
       const sequence = serial++;
       const prefix = '04660430' + String(20000 + sequence),
         sum = [...prefix].reduce(
@@ -240,14 +240,16 @@ const url =
           productsTotal: 1,
         },
       });
-      await command('supply', {
-        unitIds: [r.unit.id],
-        documentNumber: 'UPD',
-        documentDate: '2026-11-06',
-        supplierInn: supplier,
-        evidenceReference: incomingId,
-      });
-      await drain();
+      if (supply) {
+        await command('supply', {
+          unitIds: [r.unit.id],
+          documentNumber: 'UPD',
+          documentDate: '2026-11-06',
+          supplierInn: supplier,
+          evidenceReference: incomingId,
+        });
+        await drain();
+      }
       return { unitId: r.unit.id, variantId: r.unit.variantId, gtin, cis, raw };
     }
     async function shipment(f: Awaited<ReturnType<typeof fixture>>) {
@@ -514,7 +516,7 @@ const url =
         warehouseId,
       };
       expect((await inventory.list(query)).items).toMatchObject([
-        { onHand: 2, available: 2, readyToCollect: 1, withdrawn: 1 },
+        { onHand: 2, available: 1, readyToCollect: 1, withdrawn: 1 },
       ]);
       const units = await inventory.units(saleable.variantId, 0, warehouseId);
       expect(units.items).toEqual(
@@ -529,11 +531,116 @@ const url =
           .items,
       ).toMatchObject([{ id: saleable.unitId }]);
       expect((await inventory.list(query)).items).toMatchObject([
-        { onHand: 2, available: 1, readyToCollect: 0, withdrawn: 1 },
+        { onHand: 2, available: 0, readyToCollect: 0, withdrawn: 1 },
       ]);
       await expect(shipment(withdrawn)).rejects.toThrow(
         'INSUFFICIENT_LEGAL_STOCK',
       );
+    });
+    it('checks existing unobserved stock with a CHZ session even before incoming evidence is attached', async () => {
+      const f = await fixture(undefined, false);
+      codes.set(f.cis, { ...codes.get(f.cis)!, status: 'RETIRED' });
+      const query = { search: f.gtin, offset: 0, limit: 20, warehouseId };
+      expect((await inventory.list(query)).items).toMatchObject([
+        {
+          onHand: 1,
+          available: 0,
+          readyToCollect: 0,
+          withdrawn: 0,
+          unchecked: 1,
+        },
+      ]);
+      const scheduled = async () =>
+        (
+          await db.db.execute<{ status: string }>(
+            sql`SELECT status FROM integration_operations WHERE aggregate_id=${f.unitId} AND idempotency_key LIKE 'stock-status:%'`,
+          )
+        ).rows;
+      await pipeline.reconcile();
+      expect(await scheduled()).toEqual([]);
+
+      await db.db
+        .execute(sql`INSERT INTO chz_sessions(seller_inn,ciphertext,key_id,identity_hash,expires_at)
+        VALUES(${inn},'fixture','fixture','fixture',now()+interval '1 hour')`);
+      try {
+        await pipeline.reconcile();
+        await pipeline.reconcile();
+        expect(await scheduled()).toEqual([{ status: 'PENDING' }]);
+        await drain();
+        await pipeline.reconcile();
+        expect(await scheduled()).toEqual([{ status: 'SUCCEEDED' }]);
+        expect((await inventory.list(query)).items).toMatchObject([
+          {
+            onHand: 1,
+            available: 0,
+            readyToCollect: 0,
+            withdrawn: 1,
+            unchecked: 0,
+          },
+        ]);
+        expect(
+          (await inventory.list({ ...query, stock: 'available' })).items,
+        ).toEqual([]);
+        expect(
+          (await inventory.units(f.variantId, 0, warehouseId)).items,
+        ).toMatchObject([
+          {
+            id: f.unitId,
+            state: 'AVAILABLE',
+            stockStatus: 'other',
+            withdrawn: true,
+            markingUnchecked: false,
+          },
+        ]);
+        expect(
+          (await inventory.units(f.variantId, 0, warehouseId, 'available'))
+            .items,
+        ).toEqual([]);
+        expect(
+          (await pipeline.read(actor, 'unit', f.unitId)).data,
+        ).toMatchObject({
+          received_legally: false,
+          legal_state: 'WITHDRAWN',
+        });
+      } finally {
+        await db.db.execute(
+          sql`DELETE FROM chz_sessions WHERE seller_inn=${inn}`,
+        );
+      }
+    });
+    it('reserves and packs in-circulation stock with confirmed ownership and no incoming document link', async () => {
+      const f = await fixture(undefined, false);
+      await command('check', { unitId: f.unitId });
+      await drain();
+      expect((await pipeline.read(actor, 'unit', f.unitId)).data).toMatchObject(
+        {
+          legal_state: 'IN_CIRCULATION',
+          ownership_verified: 'VERIFIED',
+          supply_attached: false,
+          received_legally: false,
+          blockers: [],
+        },
+      );
+      expect(
+        (
+          await inventory.list({
+            search: f.gtin,
+            offset: 0,
+            limit: 20,
+            warehouseId,
+          })
+        ).items,
+      ).toMatchObject([{ readyToCollect: 1, available: 1 }]);
+      const shipmentId = await shipment(f);
+      await command('pack', {
+        shipmentId,
+        raw: f.raw,
+        scannerProfile: 'camera-gs1-v1',
+      });
+      await drain();
+      expect(
+        (await pipeline.read(actor, 'shipment', shipmentId)).data,
+      ).toMatchObject({ status: 'PACKED' });
     });
     it('does not reserve a code whose provider owner differs', async () => {
       const f = await fixture();

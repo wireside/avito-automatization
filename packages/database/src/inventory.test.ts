@@ -74,7 +74,7 @@ suite('catalog-backed warehouse receipt without review', () => {
   afterAll(async () => {
     await client?.pool.end();
   });
-  it('commits immediately to available stock without legal observations, manual approval or purchase price', async () => {
+  it('records physical receipt immediately and keeps unchecked pairs out of free stock', async () => {
     const input = scan('TEST000000001');
     const first = await receive(user, input);
     expect(first.ok).toBe(true);
@@ -92,9 +92,10 @@ suite('catalog-backed warehouse receipt without review', () => {
     });
     expect(page.items[0]).toMatchObject({
       onHand: 1,
-      available: 1,
+      available: 0,
       readyToCollect: 0,
       withdrawn: 0,
+      unchecked: 1,
       quarantine: 0,
     });
     expect(page.items[0]).not.toHaveProperty('reviewStatus');
@@ -154,7 +155,8 @@ suite('catalog-backed warehouse receipt without review', () => {
     expect(page.items).toHaveLength(1);
     expect(page.items[0]).toMatchObject({
       onHand: 5,
-      available: 5,
+      available: 0,
+      unchecked: 5,
       quarantine: 0,
     });
   });
@@ -289,7 +291,7 @@ suite('catalog-backed warehouse receipt without review', () => {
     });
     expect(
       (await store!.list({ search: gtin, offset: 0, limit: 40 })).items[0],
-    ).toMatchObject({ onHand: 1, available: 1, quarantine: 0 });
+    ).toMatchObject({ onHand: 1, available: 0, quarantine: 0, unchecked: 1 });
   });
   it('does not need the provider for a cached receipt, replay or duplicate', async () => {
     const input = scan('TEST000000012');

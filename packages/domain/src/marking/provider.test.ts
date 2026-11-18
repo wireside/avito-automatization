@@ -160,6 +160,32 @@ it('binds legal receipt to the processed incoming document, both INNs and exact 
   );
 });
 
+it('records a confirmed code status even when the optional UPD read fails', async () => {
+  const work: MarkingWork = {
+    kind: 'check',
+    unitId: 'u',
+    cis: 'fixture',
+    sellerInn: '123',
+    documentId: 'upd',
+    supplierInn: '456',
+  };
+  const f = setup(work);
+  const observation = {
+    cis: 'fixture',
+    status: 'RETIRED',
+    statusEx: '',
+    ownerInn: '123',
+    observedAt: 'now',
+  };
+  f.legal.check.mockResolvedValue([observation]);
+  f.legal.document.mockRejectedValue(
+    new ProviderError('CHZ_UNAVAILABLE', true),
+  );
+  await f.execute('job');
+  expect(f.store.checked).toHaveBeenCalledWith(work, observation, undefined);
+  expect(f.store.defer).toHaveBeenCalledWith('job', 'CHZ_UNAVAILABLE', 30);
+});
+
 it('ignores cancelled legal documents even if a stale queue job runs', async () => {
   const f = setup({ ...doc, status: 'CANCELLED' }, true);
   await f.execute('job');

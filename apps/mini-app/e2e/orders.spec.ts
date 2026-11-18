@@ -352,7 +352,7 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
           id: '00000000-0000-4000-8000-000000000030',
           name: 'Склад',
         },
-        totals: { onHand: 3, available: 3, quarantine: 0 },
+        totals: { onHand: 3, available: 1, quarantine: 0 },
         items: [
           {
             id: variantId,
@@ -367,6 +367,7 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
             available: 1,
             readyToCollect: 1,
             withdrawn: 0,
+            unchecked: 0,
             quarantine: 0,
             reserved: 0,
             defective: 0,
@@ -381,9 +382,10 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
             color: 'Синий',
             gtins: ['04660430764550'],
             onHand: 2,
-            available: 2,
+            available: 0,
             readyToCollect: 0,
             withdrawn: 2,
+            unchecked: 0,
             quarantine: 0,
             reserved: 0,
             defective: 0,

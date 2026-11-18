@@ -7,6 +7,7 @@ import {
 } from '@avito/domain';
 import type { Database } from './client.js';
 import type { PipelineProtection } from './marking-pipeline.js';
+import { connectedSellerInn } from './warehouses.js';
 type Row = Record<string, unknown>;
 const str = (r: Row, k: string) => (typeof r[k] === 'string' ? r[k] : '');
 export function createMarkingWorkStore(
@@ -81,7 +82,9 @@ export function createMarkingWorkStore(
         aggregate = str(job, 'aggregate_id');
       if (type === 'pipeline.check') {
         const r = await one(
-          sql`SELECT m.*,st.seller_inn,e.provider_document_id,e.supplier_inn FROM product_units u JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL JOIN cost_layers cl ON cl.id=u.cost_layer_id JOIN stock_receipt_items ri ON ri.id=cl.receipt_item_id JOIN stock_receipts sr ON sr.id=ri.receipt_id JOIN marking_pipeline_settings st ON st.warehouse_id=sr.warehouse_id LEFT JOIN marking_supply_evidence e ON e.unit_id=u.id WHERE u.id=${aggregate}`,
+          sql`SELECT m.*, ${connectedSellerInn} AS seller_inn, e.provider_document_id, e.supplier_inn
+            FROM unit_markings m LEFT JOIN marking_supply_evidence e ON e.unit_id = m.unit_id
+            WHERE m.unit_id = ${aggregate} AND m.retired_at IS NULL`,
         );
         return {
           kind: 'check',
@@ -177,9 +180,12 @@ export function createMarkingWorkStore(
         await tx.execute(
           sql`INSERT INTO unit_marking_events(marking_id,state,provider_state,source,source_event_id,ownership_verified,operation_id,observed_at) VALUES(${mark.id},${state}::chz_legal_state,${observation.status},'TRUE_API',${op},${observation.ownerInn === work.sellerInn && ['', 'EMPTY'].includes(observation.statusEx) ? 'VERIFIED' : 'REJECTED'},${op},${observation.observedAt}::timestamptz)`,
         );
-        await tx.execute(
-          sql`UPDATE marking_supply_evidence SET verified_at=${supplyVerified ? observation.observedAt : null}::timestamptz WHERE unit_id=${work.unitId}`,
-        );
+        if (supplyVerified !== undefined && work.documentId)
+          await tx.execute(
+            sql`UPDATE marking_supply_evidence SET verified_at=${supplyVerified ? observation.observedAt : null}::timestamptz
+                WHERE unit_id = ${work.unitId} AND provider_document_id = ${work.documentId}
+                  AND supplier_inn IS NOT DISTINCT FROM ${work.supplierInn}`,
+          );
         await tx.execute(
           sql`UPDATE marking_issues SET resolved_at=now() WHERE entity_id=${work.unitId} AND code LIKE 'CHZ_%'`,
         );

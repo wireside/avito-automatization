@@ -24,6 +24,7 @@ export interface InventoryVariant {
   available: number;
   readyToCollect: number;
   withdrawn: number;
+  unchecked: number;
   quarantine: number;
   reserved: number;
   defective: number;
@@ -54,6 +55,7 @@ export interface InventoryUnit {
   state: string;
   stockStatus?: 'available' | 'reserved' | 'other';
   withdrawn?: boolean;
+  markingUnchecked?: boolean;
   location: string | null;
   receiptId: string;
   receiptNumber: string;

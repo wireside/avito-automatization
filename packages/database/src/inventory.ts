@@ -10,7 +10,11 @@ import type {
   StockFilter,
 } from '@avito/domain';
 import type { Database } from './client.js';
-import { latestTrueApiMarking, readyToCollect } from './stock-collection.js';
+import {
+  freeStock,
+  latestTrueApiMarking,
+  readyToCollect,
+} from './stock-collection.js';
 import { canEnrichIntakeVariant, requirePipeline } from '@avito/domain';
 import {
   costLayers,
@@ -39,8 +43,9 @@ const selectUnit = (
  ${
    withAvailability
      ? sql`, CASE WHEN av.reservation_id IS NOT NULL THEN 'reserved'
-   WHEN av.is_eligible THEN 'available' ELSE 'other' END AS "stockStatus",
-   (ms.state = 'WITHDRAWN') IS TRUE AS withdrawn`
+   WHEN ${freeStock} THEN 'available' ELSE 'other' END AS "stockStatus",
+   (ms.state = 'WITHDRAWN') IS TRUE AS withdrawn,
+   ms.state IS NULL AS "markingUnchecked"`
      : sql``
  }
  FROM product_units u JOIN product_variants v ON v.id=u.variant_id
@@ -462,75 +467,60 @@ export function createInventoryStore(db: Database) {
               )
           )[0];
           requirePipeline(warehouse, 'WAREHOUSE_UNAVAILABLE');
+          const counts = sql`
+            count(*)::int AS "onHand",
+            count(*) FILTER (WHERE ${freeStock})::int AS available,
+            count(*) FILTER (WHERE av.reservation_id IS NOT NULL)::int AS reserved,
+            count(*) FILTER (WHERE av.current_state = 'QUARANTINE')::int AS quarantine
+          `;
+          const stock = sql`
+            FROM stock_unit_availability av
+            LEFT JOIN unit_markings m ON m.unit_id = av.unit_id AND m.retired_at IS NULL
+            ${latestTrueApiMarking}
+          `;
           const totals = one(
             (
-              await tx.execute<{
-                onHand: number;
-                available: number;
-                quarantine: number;
-                reserved: number;
-              }>(
-                sql`SELECT coalesce(sum(on_hand),0)::int AS "onHand", coalesce(sum(available),0)::int AS available, coalesce(sum(quarantine),0)::int AS quarantine, coalesce(sum(reserved),0)::int AS reserved FROM stock_balances WHERE warehouse_id=${warehouse.id}`,
-              )
+              await tx.execute<InventoryPage['totals']>(sql`
+              SELECT ${counts} ${stock} WHERE av.warehouse_id = ${warehouse.id}
+            `)
             ).rows,
           );
           const pattern = `%${query.search.replace(/[\\%_]/g, '\\$&')}%`;
           const rows = (
-            await tx.execute<
-              Omit<InventoryVariant, 'readyToCollect' | 'withdrawn'>
-            >(sql`SELECT v.id, v.product_id AS "productId", p.name AS "productName", coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
-      v.name, v.size_label AS size, v.color,
-      ARRAY(SELECT gtin FROM variant_identifiers WHERE variant_id=v.id ORDER BY gtin) AS gtins,
-      sum(b.on_hand)::int AS "onHand", sum(b.available)::int AS available, sum(b.quarantine)::int AS quarantine,
-      sum(b.reserved)::int AS reserved, sum(b.defective)::int AS defective
-      FROM stock_balances b JOIN product_variants v ON v.id=b.variant_id LEFT JOIN products p ON p.id=v.product_id
-      WHERE b.warehouse_id=${warehouse.id} AND (v.name ILIKE ${pattern} OR v.sku ILIKE ${pattern} OR p.name ILIKE ${pattern} OR coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') ILIKE ${pattern} OR v.size_label ILIKE ${pattern} OR v.color ILIKE ${pattern} OR EXISTS(SELECT 1 FROM variant_identifiers vi WHERE vi.variant_id=v.id AND vi.gtin ILIKE ${pattern}))
-      GROUP BY v.id,p.id
-      HAVING CASE ${query.stock ?? 'all'}
-        WHEN 'available' THEN sum(b.available) > 0
-        WHEN 'reserved' THEN sum(b.reserved) > 0
-        ELSE true END
-      ORDER BY coalesce(p.name,v.name),
-        (CASE WHEN p.id IS NOT NULL THEN p.manufacturer_article ELSE v.attributes->'intakeCatalog'->>'article' END) NULLS LAST,
-        coalesce(p.id,v.id),v.size_label NULLS LAST,v.color NULLS LAST,v.id
-      LIMIT ${query.limit + 1} OFFSET ${query.offset}`)
+            await tx.execute<InventoryVariant & Record<string, unknown>>(sql`
+              SELECT v.id, v.product_id AS "productId", p.name AS "productName",
+                coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') AS article,
+                v.name, v.size_label AS size, v.color,
+                ARRAY(SELECT gtin FROM variant_identifiers WHERE variant_id=v.id ORDER BY gtin) AS gtins,
+                ${counts},
+                count(*) FILTER (WHERE ${readyToCollect})::int AS "readyToCollect",
+                count(*) FILTER (WHERE ms.state = 'WITHDRAWN')::int AS withdrawn,
+                count(*) FILTER (WHERE ms.state IS NULL)::int AS unchecked,
+                count(*) FILTER (WHERE av.current_state = 'DEFECTIVE')::int AS defective
+              ${stock}
+              JOIN product_variants v ON v.id = av.variant_id
+              LEFT JOIN products p ON p.id = v.product_id
+              WHERE av.warehouse_id = ${warehouse.id}
+                AND (v.name ILIKE ${pattern} OR v.sku ILIKE ${pattern}
+                  OR p.name ILIKE ${pattern}
+                  OR coalesce(p.manufacturer_article, v.attributes->'intakeCatalog'->>'article') ILIKE ${pattern}
+                  OR v.size_label ILIKE ${pattern} OR v.color ILIKE ${pattern}
+                  OR EXISTS(SELECT 1 FROM variant_identifiers vi WHERE vi.variant_id=v.id AND vi.gtin ILIKE ${pattern}))
+              GROUP BY v.id, p.id
+              HAVING CASE ${query.stock ?? 'all'}
+                WHEN 'available' THEN count(*) FILTER (WHERE ${freeStock}) > 0
+                WHEN 'reserved' THEN count(*) FILTER (WHERE av.reservation_id IS NOT NULL) > 0
+                ELSE true END
+              ORDER BY coalesce(p.name,v.name),
+                (CASE WHEN p.id IS NOT NULL THEN p.manufacturer_article ELSE v.attributes->'intakeCatalog'->>'article' END) NULLS LAST,
+                coalesce(p.id,v.id), v.size_label NULLS LAST, v.color NULLS LAST, v.id
+              LIMIT ${query.limit + 1} OFFSET ${query.offset}
+            `)
           ).rows;
-          const page = rows.slice(0, query.limit);
-          const inventoryCounts = page.length
-            ? (
-                await tx.execute<{
-                  id: string;
-                  readyToCollect: number;
-                  withdrawn: number;
-                }>(sql`
-                SELECT av.variant_id AS id,
-                  count(*) FILTER (WHERE ${readyToCollect})::int AS "readyToCollect",
-                  count(*) FILTER (WHERE ms.state = 'WITHDRAWN')::int AS withdrawn
-                FROM stock_unit_availability av
-                LEFT JOIN unit_markings m ON m.unit_id = av.unit_id AND m.retired_at IS NULL
-                ${latestTrueApiMarking}
-                WHERE av.warehouse_id = ${warehouse.id}
-                  AND av.variant_id IN (${sql.join(
-                    page.map((variant) => sql`${variant.id}`),
-                    sql`, `,
-                  )})
-                GROUP BY av.variant_id
-              `)
-              ).rows
-            : [];
-          const countsByVariant = new Map(
-            inventoryCounts.map(({ id, ...counts }) => [id, counts]),
-          );
           return {
             warehouse,
             totals,
-            items: page.map((variant) => ({
-              ...variant,
-              ...(countsByVariant.get(variant.id) ?? {
-                readyToCollect: 0,
-                withdrawn: 0,
-              }),
-            })),
+            items: rows.slice(0, query.limit),
             hasMore: rows.length > query.limit,
           };
         },
@@ -551,7 +541,7 @@ export function createInventoryStore(db: Database) {
               OR ${warehouseId ?? null}::uuid IS NULL AND uw.code='MAIN')
             AND uw.archived_at IS NULL AND av.warehouse_id=uw.id
             AND CASE ${stock}
-              WHEN 'available' THEN av.is_eligible AND av.reservation_id IS NULL
+              WHEN 'available' THEN ${freeStock}
               WHEN 'reserved' THEN av.reservation_id IS NOT NULL
               ELSE true END
           ORDER BY r.received_at DESC,u.id LIMIT 21 OFFSET ${offset}`,

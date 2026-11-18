@@ -134,7 +134,14 @@ const groups = computed(() =>
             "
           >
             К сборке: {{ item.readyToCollect }}
-            <span v-if="item.readyToCollect < quantity" class="d-block">
+            <span
+              v-if="
+                item.readyToCollect < quantity &&
+                !item.withdrawn &&
+                !item.unchecked
+              "
+              class="d-block"
+            >
               {{
                 item.available < quantity
                   ? 'Мало свободных пар'
@@ -147,6 +154,12 @@ const groups = computed(() =>
             class="picker-withdrawn text-body-small text-warning"
           >
             Выведено из оборота: {{ item.withdrawn }}
+          </span>
+          <span
+            v-if="item.unchecked"
+            class="picker-withdrawn text-body-small text-secondary"
+          >
+            Статус ЧЗ не проверен: {{ item.unchecked }}
           </span>
         </button>
       </template>

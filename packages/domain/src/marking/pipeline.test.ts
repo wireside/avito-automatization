@@ -24,19 +24,18 @@ describe('warehouse legal policy', () => {
       'CALENDAR_INCOMPLETE',
     );
   });
-  it('requires fresh provider evidence, ownership and legal receipt', () => {
+  it('requires a recent observation and verified ownership', () => {
     const u = {
       physicalState: 'AVAILABLE',
       legalState: 'IN_CIRCULATION',
       ownership: 'VERIFIED',
-      receivedLegally: true,
       observedAt: '2026-11-04T10:00:00Z',
       pending: false,
     };
     expect(legalBlockers(u, new Date('2026-11-04T10:05:00Z'))).toEqual([]);
     expect(
       legalBlockers(
-        { ...u, pending: true, ownership: 'UNKNOWN', receivedLegally: false },
+        { ...u, pending: true, ownership: 'UNKNOWN' },
         new Date('2026-11-04T10:16:00Z'),
       ),
     ).toEqual(
@@ -44,7 +43,6 @@ describe('warehouse legal policy', () => {
         'OWNERSHIP_NOT_VERIFIED',
         'LEGAL_OPERATION_PENDING',
         'LEGAL_CHECK_STALE',
-        'SUPPLY_NOT_CONFIRMED',
       ]),
     );
   });

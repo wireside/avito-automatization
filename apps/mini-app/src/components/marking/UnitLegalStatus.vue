@@ -50,9 +50,7 @@ const owner = computed(() =>
         {{
           !state.data.value.data.blockers.length
             ? 'Готов к продаже'
-            : state.data.value.data.received_legally
-              ? 'Нужна помощь'
-              : 'Проверяем документы'
+            : 'Недоступен для сборки'
         }}
       </p>
       <p class="text-body-small mt-2">
@@ -60,6 +58,15 @@ const owner = computed(() =>
       </p>
       <p class="text-body-small mt-1">
         Юридически: {{ markingLabel(state.data.value.data.legal_state) }}
+      </p>
+      <p class="text-body-small text-secondary mt-1">
+        {{
+          state.data.value.data.received_legally
+            ? 'УПД подтверждён'
+            : state.data.value.data.supply_attached
+              ? 'УПД привязан, подтверждение не получено'
+              : 'УПД не привязан · необязательно'
+        }}
       </p>
       <p class="text-body-small text-muted mt-1">
         Проверка: {{ displayDate(state.data.value.data.observed_at) }}

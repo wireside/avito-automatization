@@ -11,16 +11,15 @@ export const latestTrueApiMarking = sql`
   ) ms ON true
 `;
 
+// Free stock excludes items whose code is withdrawn or yet to be checked.
+export const freeStock = sql`
+  av.is_eligible AND av.reservation_id IS NULL AND ms.state = 'IN_CIRCULATION'
+`;
+
 // Shared by the inventory preview and the transactional reservation.
 export const readyToCollect = sql`
-  av.is_eligible
-  AND av.reservation_id IS NULL
-  AND ms.state = 'IN_CIRCULATION'
+  ${freeStock}
   AND ms.ownership_verified = 'VERIFIED'
   AND ms.observed_at > statement_timestamp() - ${legalObservationMaxAgeMs} * interval '1 millisecond'
   AND ms.observed_at <= statement_timestamp()
-  AND EXISTS (
-    SELECT 1 FROM marking_supply_evidence e
-    WHERE e.unit_id = av.unit_id AND e.verified_at IS NOT NULL
-  )
 `;

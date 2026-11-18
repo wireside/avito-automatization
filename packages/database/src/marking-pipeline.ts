@@ -91,6 +91,7 @@ async function unit(tx: Tx | Database, id: string, lock = false) {
     tx,
     sql`SELECT u.id,u.variant_id,u.current_state,u.current_location_id,u.movement_revision,u.internal_code,m.id AS marking_id,m.identity_hash,m.masked_code,coalesce(l.warehouse_id,(SELECT sr.warehouse_id FROM cost_layers cl JOIN stock_receipt_items ri ON ri.id=cl.receipt_item_id JOIN stock_receipts sr ON sr.id=ri.receipt_id WHERE cl.id=u.cost_layer_id)) AS warehouse_id,
     ms.state AS legal_state,ms.ownership_verified,ms.observed_at,
+    EXISTS(SELECT 1 FROM marking_supply_evidence e WHERE e.unit_id=u.id AND e.provider_document_id IS NOT NULL) AS supply_attached,
     EXISTS(SELECT 1 FROM marking_supply_evidence e WHERE e.unit_id=u.id AND e.verified_at IS NOT NULL) AS received_legally,
     EXISTS(SELECT 1 FROM chz_operations co WHERE co.marking_id=m.id AND co.status IN ${active}) AS pending
     FROM product_units u JOIN unit_markings m ON m.unit_id=u.id AND m.retired_at IS NULL LEFT JOIN stock_locations l ON l.id=u.current_location_id ${latestTrueApiMarking} WHERE u.id=${id}`,
@@ -102,7 +103,6 @@ function blockers(u: Row) {
       physicalState: s(u, 'current_state'),
       legalState: s(u, 'legal_state'),
       ownership: s(u, 'ownership_verified'),
-      receivedLegally: u.received_legally === true,
       observedAt: s(u, 'observed_at') || null,
       pending: u.pending === true,
     },
@@ -1217,6 +1217,43 @@ export function createMarkingPipelineStore(
               ':' +
               Math.floor(Date.now() / 300000),
           );
+        // Read and refresh active stock regardless of optional incoming evidence.
+        if (protection)
+          for (const candidate of await rows(
+            tx,
+            sql`
+            SELECT u.id, m.id AS marking_id
+            FROM product_units u
+            JOIN stock_locations l ON l.id = u.current_location_id AND l.archived_at IS NULL
+            JOIN warehouses w ON w.id = l.warehouse_id AND w.archived_at IS NULL
+            JOIN unit_markings m ON m.unit_id = u.id AND m.retired_at IS NULL
+            ${latestTrueApiMarking}
+            WHERE u.current_state IN ('AVAILABLE', 'PACKING')
+              AND EXISTS (SELECT 1 FROM chz_sessions c
+                WHERE c.seller_inn = ${connectedSellerInn} AND c.expires_at > now() + interval '2 minutes')
+              AND (ms.observed_at IS NULL
+                OR (ms.state = 'IN_CIRCULATION' AND ms.observed_at < now() - interval '10 minutes'))
+              AND NOT EXISTS (SELECT 1 FROM integration_operations io
+                WHERE io.operation_type = 'pipeline.check' AND io.aggregate_id = u.id::text
+                  AND (io.status IN ('PENDING','RUNNING','RETRY_SCHEDULED')
+                    OR (io.idempotency_key LIKE 'stock-status:%' AND io.status = 'MANUAL_ATTENTION'
+                      AND io.created_at > now() - interval '1 day')))
+            ORDER BY u.created_at, u.id
+            LIMIT (SELECT greatest(0, 20 - count(*)::int)
+              FROM integration_operations io
+              WHERE io.operation_type = 'pipeline.check' AND io.idempotency_key LIKE 'stock-status:%'
+                AND io.status IN ('PENDING','RUNNING','RETRY_SCHEDULED'))
+          `,
+          ))
+            await enqueue(
+              tx,
+              'pipeline.check',
+              s(candidate, 'id'),
+              'stock-status:' +
+                s(candidate, 'marking_id') +
+                ':' +
+                Math.floor(Date.now() / 300_000),
+            );
         for (const co of await rows(
           tx,
           sql`SELECT co.id,co.submission_due_at,co.shipment_id,co.status FROM chz_operations co WHERE co.submission_due_at<now() AND (co.status<>'CONFIRMED' OR co.confirmed_at>co.submission_due_at)`,

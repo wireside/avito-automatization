@@ -72,7 +72,7 @@ export interface MarkingWorkStore {
   checked(
     work: Extract<MarkingWork, { kind: 'check' }>,
     observation: CodeObservation,
-    supplyVerified: boolean,
+    supplyVerified: boolean | undefined,
   ): Promise<void>;
   markingsAccepted(shipmentId: string): Promise<void>;
   signature(documentId: string): Promise<SignedPayload | null>;
@@ -121,13 +121,21 @@ export function createMarkingExecutor(deps: {
     if (!work) return;
     try {
       if (work.kind === 'check') {
+        if (!work.sellerInn) throw new ProviderError('CHZ_AUTH_REQUIRED', true);
         const observations = await deps.legal.check([work.cis]);
         const observation = observations.find((o) => o.cis === work.cis);
         if (!observation)
           throw new ProviderError('CHZ_CODE_RESPONSE_INCOMPLETE');
-        let verified = false;
+        let verified: boolean | undefined;
         if (work.documentId) {
-          const doc = await deps.legal.document(work.documentId);
+          let doc: ProviderDocument;
+          try {
+            doc = await deps.legal.document(work.documentId);
+          } catch (error) {
+            // The observation is valid even when the UPD cannot be read.
+            await deps.store.checked(work, observation, undefined);
+            throw error;
+          }
           verified =
             doc.status === 'CHECKED_OK' &&
             doc.receiverInn === work.sellerInn &&

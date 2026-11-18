@@ -48,6 +48,7 @@ export const unitLegalSchema = z.object({
   ownership_verified: text,
   observed_at: text,
   received_legally: z.boolean(),
+  supply_attached: z.boolean().optional(),
   pending: z.boolean(),
   blockers: z.array(z.string()),
 });

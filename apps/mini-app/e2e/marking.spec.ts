@@ -384,6 +384,7 @@ test('legal details are loaded only after expanding a unit', async ({
             available: 1,
             readyToCollect: 1,
             withdrawn: 0,
+            unchecked: 0,
             quarantine: 0,
             reserved: 0,
             defective: 0,
@@ -426,7 +427,7 @@ test('legal details are loaded only after expanding a unit', async ({
           observed_at: null,
           received_legally: false,
           pending: false,
-          blockers: ['SUPPLY_NOT_CONFIRMED'],
+          blockers: ['CODE_NOT_IN_CIRCULATION'],
         },
       },
     });
@@ -447,7 +448,7 @@ test('legal details are loaded only after expanding a unit', async ({
   expect(calls).toBe(0);
   await page.getByRole('button', { name: /Юридическое состояние/ }).click();
   await expect(
-    page.getByText('Проверяем документы', { exact: true }),
+    page.getByText('Недоступен для сборки', { exact: true }),
   ).toBeVisible();
   expect(calls).toBe(1);
 });

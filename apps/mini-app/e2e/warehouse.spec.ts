@@ -54,6 +54,7 @@ function pageData(count: number) {
             available: count,
             readyToCollect: count,
             withdrawn: 0,
+            unchecked: 0,
             quarantine: 0,
             reserved: 0,
             defective: 0,
@@ -751,6 +752,15 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
       reserved: 2,
     },
     { ...baseline, id: 'size-46', size: '46', available: 3, reserved: 0 },
+    {
+      ...baseline,
+      id: 'size-50',
+      size: '50',
+      onHand: 1,
+      available: 0,
+      readyToCollect: 0,
+      unchecked: 1,
+    },
   ].map((item) => ({
     ...item,
     productId: 'same-model',
@@ -760,12 +770,17 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
   }));
   await page.route('**/api/v1/inventory?*', (route) => {
     const stock = new URL(route.request().url()).searchParams.get('stock');
-    const items = stock === 'reserved' ? [variants[0]] : variants;
+    const items =
+      stock === 'reserved'
+        ? variants.filter((v) => v.reserved > 0)
+        : stock === 'available'
+          ? variants.filter((v) => v.available > 0)
+          : variants;
     return route.fulfill({
       json: {
-        ...pageData(5),
+        ...pageData(6),
         items,
-        totals: { onHand: 5, available: 3, reserved: 2, quarantine: 0 },
+        totals: { onHand: 6, available: 3, reserved: 2, quarantine: 0 },
       },
     });
   });
@@ -798,6 +813,10 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
   await expect(sizes.nth(0)).toHaveAccessibleName(/Размер 46/);
   await expect(sizes.nth(1)).toHaveAccessibleName(/Размер 48/);
   await expect(sizes.nth(1)).toContainText('Выведено из оборота: 1');
+  await expect(sizes.nth(2)).toContainText('Статус ЧЗ не проверен: 1');
+  await stock.getByRole('button', { name: 'Свободно 3', exact: true }).click();
+  await expect(sizes).toHaveCount(1);
+  await expect(sizes.first()).toHaveAccessibleName(/Размер 46/);
   await page.screenshot({
     path: testInfo.outputPath('stock-groups.png'),
     animations: 'disabled',

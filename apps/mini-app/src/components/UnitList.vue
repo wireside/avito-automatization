@@ -103,6 +103,11 @@ const date = (value: string) =>
           <strong class="text-title-small">{{ unit.maskedCode }}</strong>
           <span class="d-flex ga-2 flex-wrap">
             <v-chip
+              v-if="
+                unit.state !== 'AVAILABLE' ||
+                unit.stockStatus === 'reserved' ||
+                (!unit.withdrawn && !unit.markingUnchecked)
+              "
               :color="
                 (
                   unit.stockStatus
@@ -137,6 +142,13 @@ const date = (value: string) =>
               class="text-warning"
             >
               Выведен из оборота
+            </v-chip>
+            <v-chip
+              v-else-if="unit.markingUnchecked"
+              color="raised"
+              class="text-secondary"
+            >
+              Статус ЧЗ не проверен
             </v-chip>
           </span>
         </div>
