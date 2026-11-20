@@ -212,6 +212,7 @@ export async function createApiRuntime(config: AppConfig) {
             ref,
             action === 'pack' ? 'pack' : 'dispatch',
           );
+          return current.order.marketplaceId || undefined;
         },
         importOrder: async (input) => {
           const result = await orderReader.get(String(input.externalOrderId));

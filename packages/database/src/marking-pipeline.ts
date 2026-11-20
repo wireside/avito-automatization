@@ -134,7 +134,7 @@ async function shipment(tx: Tx | Database, id: string, lock = false) {
     await tx.execute(sql`SELECT id FROM shipments WHERE id=${id} FOR UPDATE`);
   return first(
     tx,
-    sql`SELECT s.*,o.external_order_id,o.status AS order_status,o.provider_status,o.provider_updated_at FROM shipments s JOIN orders o ON o.id=s.order_id WHERE s.id=${id}`,
+    sql`SELECT s.*,o.external_order_id,o.marketplace_order_id,o.status AS order_status,o.provider_status,o.provider_updated_at FROM shipments s JOIN orders o ON o.id=s.order_id WHERE s.id=${id}`,
   );
 }
 async function composition(tx: Tx | Database, shipmentId: string) {
@@ -159,7 +159,11 @@ async function makeDocument(
   warehouseId: string | null,
   effectiveAt: string,
   due: string | null,
-  documentContext: {
+  {
+    avitoMarketplaceId,
+    ...documentContext
+  }: {
+    avitoMarketplaceId?: string;
     paid?: boolean;
     primaryDocument?: { number: string; date: string; name: string };
   } = {},
@@ -205,6 +209,17 @@ async function makeDocument(
           sql`SELECT d.external_document_id FROM chz_documents d JOIN chz_document_items di ON di.document_id=d.id JOIN chz_operations co ON co.id=di.chz_operation_id WHERE co.sale_cycle_id=${units[0]!.cycleId} AND co.action='WITHDRAW' AND d.status='CONFIRMED'`,
         )
       : undefined;
+  let marketplaceId = avitoMarketplaceId;
+  if (
+    action === 'WITHDRAW' &&
+    !documentContext.primaryDocument &&
+    !marketplaceId
+  ) {
+    const shipmentId = units[0]?.shipmentId;
+    requirePipeline(shipmentId, 'ENTITY_NOT_FOUND');
+    const sh = await shipment(tx, shipmentId);
+    marketplaceId = s(sh, 'marketplace_order_id');
+  }
   const draft = buildClothingDocument({
     action: action as 'WITHDRAW' | 'RETURN' | 'WRITE_OFF' | 'CORRECT',
     reason,
@@ -212,6 +227,9 @@ async function makeDocument(
     fiasId: s(settings, 'fias_id'),
     effectiveAt,
     items: draftItems,
+    ...(marketplaceId
+      ? { avitoOrder: { marketplaceId, basisAt: new Date().toISOString() } }
+      : {}),
     ...(original
       ? { cancelledDocumentId: s(original, 'external_document_id') }
       : {}),
@@ -279,7 +297,7 @@ export function createMarkingPipelineStore(
   },
 ): PipelineStore {
   return {
-    async execute(action, input, actorId) {
+    async execute(action, input, actorId, avitoMarketplaceId) {
       return db.transaction(async (tx) => {
         // One bounded writer lane prevents opposite lock orders across multi-unit workflows.
         await tx.execute(sql`SELECT pg_advisory_xact_lock(19378041)`);
@@ -376,7 +394,7 @@ export function createMarkingPipelineStore(
           const orderId = randomUUID(),
             shipmentId = randomUUID();
           await tx.execute(
-            sql`INSERT INTO orders(id,channel_id,external_order_id,status,provider_status,available_actions,ordered_at,provider_updated_at,last_operation_id) VALUES(${orderId},${s(channel, 'id')},${String(input.externalOrderId)},'NEW',${String(input.providerStatus)},${JSON.stringify(input.availableActions ?? [])}::jsonb,now(),${String(input.providerUpdatedAt)}::timestamptz,${op})`,
+            sql`INSERT INTO orders(id,channel_id,external_order_id,marketplace_order_id,status,provider_status,available_actions,ordered_at,provider_updated_at,last_operation_id) VALUES(${orderId},${s(channel, 'id')},${String(input.externalOrderId)},${s(input, 'marketplaceOrderId') || null},'NEW',${String(input.providerStatus)},${JSON.stringify(input.availableActions ?? [])}::jsonb,now(),${String(input.providerUpdatedAt)}::timestamptz,${op})`,
           );
           await tx.execute(
             sql`INSERT INTO shipments(id,order_id,warehouse_id,parcel_code,last_operation_id) VALUES(${shipmentId},${orderId},${warehouseId},${String(input.parcelCode)},${op})`,
@@ -540,6 +558,7 @@ export function createMarkingPipelineStore(
               warehouseId,
               now,
               null,
+              avitoMarketplaceId ? { avitoMarketplaceId } : undefined,
             );
             result = { shipmentId, documentId, status: 'LEGAL_PENDING' };
           } else if (action === 'handover') {

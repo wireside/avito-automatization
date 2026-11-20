@@ -123,6 +123,7 @@ export const orders = pgTable(
       .notNull()
       .references(() => salesChannels.id),
     externalOrderId: text('external_order_id').notNull(),
+    marketplaceOrderId: text('marketplace_order_id'),
     status: orderStatusEnum('status').default('NEW').notNull(),
     providerStatus: text('provider_status').notNull(),
     availableActions: jsonb('available_actions')

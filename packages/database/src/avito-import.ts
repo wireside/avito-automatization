@@ -68,6 +68,7 @@ export async function prepareAvitoImport(
   return {
     requestId: input.requestId,
     externalOrderId: order.id,
+    marketplaceOrderId: order.marketplaceId,
     externalAccountId: accountId,
     parcelCode:
       order.delivery.dispatchNumber ??

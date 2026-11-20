@@ -1,0 +1,1 @@
+ALTER TABLE "orders" ADD COLUMN "marketplace_order_id" text;

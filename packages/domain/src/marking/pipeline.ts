@@ -82,6 +82,7 @@ export interface PipelineStore {
     action: PipelineAction,
     input: PipelineInput,
     actorId: string,
+    avitoMarketplaceId?: string,
   ): Promise<Record<string, unknown>>;
   read(
     kind:
@@ -107,7 +108,7 @@ export function createMarkingPipeline(
     validateShipment?: (
       action: 'pack' | 'prepare' | 'handover',
       input: PipelineInput,
-    ) => Promise<void>;
+    ) => Promise<string | undefined>;
     importOrder?: (input: PipelineInput) => Promise<PipelineInput>;
   } = {},
 ) {
@@ -143,9 +144,16 @@ export function createMarkingPipeline(
           };
         return store.execute('create', imported, user.id);
       }
+      if (action === 'prepare') {
+        const avitoMarketplaceId = await options.validateShipment?.(
+          action,
+          input,
+        );
+        return store.execute(action, input, user.id, avitoMarketplaceId);
+      }
       if (
-        (action === 'pack' || action === 'prepare' || action === 'handover') &&
-        !(action === 'handover' && input.occurredOutsideApp === true)
+        action === 'pack' ||
+        (action === 'handover' && input.occurredOutsideApp !== true)
       )
         await options.validateShipment?.(action, input);
       return store.execute(action, input, user.id);

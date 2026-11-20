@@ -12,9 +12,13 @@ export interface ClothingDocumentInput {
   fiasId?: string;
   effectiveAt: string;
   items: { cis: string; salePriceKopecks?: number }[];
+  avitoOrder?: { marketplaceId: string; basisAt: string };
   paid?: boolean;
   primaryDocument?: PrimaryDocument;
   cancelledDocumentId?: string;
+}
+function moscowDay(at: string): string {
+  return new Date(Date.parse(at) + 3 * 3600_000).toISOString().slice(0, 10);
 }
 export function buildClothingDocument(input: ClothingDocumentInput): {
   type: 'LK_RECEIPT' | 'LP_RETURN' | 'LK_RECEIPT_CANCEL';
@@ -30,9 +34,7 @@ export function buildClothingDocument(input: ClothingDocumentInput): {
     input.items.every((i) => /^01\d{14}21[!-~]{13}$/.test(i.cis)),
     'INVALID_MARKING',
   );
-  const day = new Date(Date.parse(input.effectiveAt) + 3 * 3600_000)
-    .toISOString()
-    .slice(0, 10);
+  const day = moscowDay(input.effectiveAt);
   if (input.action === 'CORRECT') {
     requirePipeline(input.cancelledDocumentId, 'ORIGINAL_DOCUMENT_REQUIRED');
     return {
@@ -84,8 +86,17 @@ export function buildClothingDocument(input: ClothingDocumentInput): {
       ),
     'SALE_PRICE_REQUIRED',
   );
-  requirePipeline(sale || input.primaryDocument, 'PRIMARY_DOCUMENT_REQUIRED');
-  const d = input.primaryDocument;
+  const order = input.avitoOrder;
+  const d =
+    input.primaryDocument ??
+    (sale && order?.marketplaceId
+      ? {
+          number: order.marketplaceId,
+          date: moscowDay(order.basisAt),
+          name: `Заказ через Авито (отгрузка №${order.marketplaceId})`,
+        }
+      : undefined);
+  requirePipeline(sale || d, 'PRIMARY_DOCUMENT_REQUIRED');
   return {
     type: 'LK_RECEIPT',
     body: {
@@ -93,7 +104,7 @@ export function buildClothingDocument(input: ClothingDocumentInput): {
       action: input.reason,
       action_date: day,
       ...(sale ? { fias_id: input.fiasId } : {}),
-      ...(!sale && d
+      ...(d
         ? {
             document_type: 'OTHER',
             document_number: d.number,

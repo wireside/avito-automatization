@@ -306,7 +306,10 @@ const url =
         scannerProfile: 'camera-gs1-v1',
       });
       await drain();
-      await command('prepare', { shipmentId: id });
+      const marketplaceId = '70000000000000001';
+      await createMarkingPipeline(store, {
+        validateShipment: () => Promise.resolve(marketplaceId),
+      }).command(actor, 'prepare', { requestId: randomUUID(), shipmentId: id });
       await drain();
       expect((await pipeline.read(actor, 'shipment', id)).data).toMatchObject({
         status: 'READY',
@@ -327,6 +330,16 @@ const url =
         verificationSource: 'WINDOWS_CRYPTOPRO',
       });
       expect(exported.providerReceiptBase64).toBeTypeOf('string');
+      const payload: unknown = JSON.parse(
+        Buffer.from(String(exported.payloadBase64), 'base64').toString('utf8'),
+      );
+      expect(payload).toMatchObject({
+        action: 'DISTANCE',
+        document_type: 'OTHER',
+        document_number: marketplaceId,
+        primary_document_custom_name: `Заказ через Авито (отгрузка №${marketplaceId})`,
+        products: [{ cis: f.cis, product_cost: 250000 }],
+      });
       await command('handover', {
         shipmentId: id,
         occurredAt: new Date().toISOString(),
@@ -358,6 +371,12 @@ const url =
       await drain();
       await command('prepare', { shipmentId: next });
       await drain();
+      const nextSubmission = legal.submit.mock.lastCall?.[0];
+      expect(nextSubmission?.type).toBe('LK_RECEIPT');
+      const payloadWithoutMarketplaceId: unknown = JSON.parse(
+        Buffer.from(nextSubmission!.payloadBase64, 'base64').toString('utf8'),
+      );
+      expect(payloadWithoutMarketplaceId).not.toHaveProperty('document_number');
       const withdrawals = (
         await db.db.execute<{ n: number }>(
           sql`SELECT count(*)::int AS n FROM chz_operations co JOIN unit_markings m ON m.id=co.marking_id WHERE m.unit_id=${f.unitId} AND co.action='WITHDRAW' AND co.status='CONFIRMED'`,
@@ -396,10 +415,11 @@ const url =
       const second = await fixture();
       const externalAccountId = randomUUID();
       const listingId = '12345';
+      const marketplaceId = '70000000000000002';
       const timestamp = new Date().toISOString();
       const order = (id: string): MarketplaceOrder => ({
         id,
-        marketplaceId: null,
+        marketplaceId,
         status: 'ready_to_ship',
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -454,6 +474,14 @@ const url =
       expect(
         await importer.command(actor, 'importOrder', attempts[winningIndex]!),
       ).toMatchObject({ replayed: true });
+
+      expect(
+        (
+          await db.db.execute<{ marketplace_order_id: string }>(
+            sql`SELECT marketplace_order_id FROM orders WHERE external_order_id=${attempts[winningIndex]!.externalOrderId}`,
+          )
+        ).rows[0]?.marketplace_order_id,
+      ).toBe(marketplaceId);
 
       const query = { search: first.gtin, offset: 0, limit: 20, warehouseId };
       expect(
