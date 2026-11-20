@@ -4,6 +4,7 @@ import { useDisplay } from 'vuetify';
 import OrdersView from './components/OrdersView.vue';
 import WarehouseView from './components/WarehouseView.vue';
 import DesignIcon from './components/DesignIcon.vue';
+import { useMobileInput } from './composables/useMobileInput';
 import { useTelegramSession } from './composables/useTelegramSession';
 import type { DesignIconName } from './design/icons';
 import { layout } from './design/tokens';
@@ -11,6 +12,7 @@ const MarkingPipelineView = defineAsyncComponent(
   () => import('./components/marking/MarkingPipelineView.vue'),
 );
 const { mdAndUp } = useDisplay();
+const mobileInputActive = useMobileInput(mdAndUp);
 const activePage = ref('warehouse');
 const initData = window.Telegram?.WebApp.initData ?? '';
 const session = useTelegramSession(initData);
@@ -217,7 +219,7 @@ const navigation = computed<
       </v-container>
     </v-main>
     <v-bottom-navigation
-      v-if="authenticated && stockAllowed && !mdAndUp"
+      v-if="authenticated && stockAllowed && !mdAndUp && !mobileInputActive"
       v-model="activePage"
       :height="layout.bottomNavigationHeight"
       grow

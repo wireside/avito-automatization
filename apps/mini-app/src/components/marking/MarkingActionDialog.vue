@@ -27,7 +27,7 @@ const titles: Partial<Record<MarkingAction, string>> = {
   return: 'Принять возврат',
   cancel: 'Отменить посылку',
   dispose: 'Утрата / уничтожение',
-  supply: 'Документы поставщика',
+  supply: 'Привязка входящего УПД',
   retry: 'Повтор фоновой операции',
   correctDocument: 'Исправить отклонённые строки',
 };

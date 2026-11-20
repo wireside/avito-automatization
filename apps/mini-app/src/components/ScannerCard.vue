@@ -3,7 +3,11 @@ import { nextTick, ref, useId, type ComponentPublicInstance } from 'vue';
 import { useDisplay } from 'vuetify';
 import DesignIcon from './DesignIcon.vue';
 const raw = defineModel<string>({ required: true });
-defineProps<{ disabled: boolean; cameraOpen: boolean; purpose?: 'pack' }>();
+const props = defineProps<{
+  disabled: boolean;
+  cameraOpen: boolean;
+  purpose?: 'pack';
+}>();
 const titleId = useId();
 const emit = defineEmits<{
   submit: [];
@@ -16,6 +20,8 @@ const { mdAndUp } = useDisplay();
 const field = ref<ComponentPublicInstance>();
 function focus() {
   void nextTick(() => {
+    if (props.cameraOpen || window.matchMedia('(pointer: coarse)').matches)
+      return;
     const input = field.value?.$el.querySelector('input') as
       HTMLInputElement | undefined;
     input?.focus({ preventScroll: true });

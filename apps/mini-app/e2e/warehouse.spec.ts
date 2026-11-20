@@ -329,6 +329,86 @@ test('camera errors are explained without a false successful receipt', async ({
   ).toHaveCount(0);
 });
 
+test.describe('mobile input', () => {
+  const viewport = { width: 390, height: 844 };
+  test.use({ viewport, hasTouch: true, isMobile: true });
+
+  test.beforeEach(async ({ page }) => {
+    await telegram(page);
+    await page.route('**/api/v1/inventory?*', (route) =>
+      route.fulfill({ json: pageData(0) }),
+    );
+    await page.goto('/');
+  });
+
+  test('hides navigation during editing and dismisses the keyboard on an outside tap', async ({
+    page,
+  }) => {
+    const navigation = page.locator('.mobile-navigation');
+    const input = page.getByLabel('USB-сканер или строка DataMatrix');
+    const heading = page.getByRole('heading', { name: 'Добавить товар' });
+    await expect(navigation).toBeVisible();
+    await input.tap();
+    await input.fill('Код для проверки');
+    await expect(navigation).toBeHidden();
+    await input.tap();
+    await expect(input).toBeFocused();
+
+    // Exercise dismissal when the browser would keep the field focused.
+    await heading.evaluate((element) =>
+      element.addEventListener('mousedown', (event) => event.preventDefault()),
+    );
+    await heading.tap();
+    await expect(input).not.toBeFocused();
+    await expect(input).toHaveValue('Код для проверки');
+    await expect(navigation).toBeVisible();
+    await expect(navigation.getByRole('button', { name: 'Склад' })).toHaveClass(
+      /v-btn--selected/,
+    );
+  });
+
+  test('restores navigation when the visible viewport recovers after system dismissal', async ({
+    page,
+  }) => {
+    const input = page.getByLabel('USB-сканер или строка DataMatrix');
+    const navigation = page.locator('.mobile-navigation');
+    await input.tap();
+    await page.evaluate(() => {
+      const viewport = window.visualViewport!;
+      Object.defineProperty(viewport, 'height', {
+        value: viewport.height - 280,
+        configurable: true,
+      });
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    await expect(input).toBeFocused();
+    await expect(navigation).toBeHidden();
+    await page.evaluate(() => {
+      const viewport = window.visualViewport!;
+      Reflect.deleteProperty(viewport, 'height');
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    await expect(input).not.toBeFocused();
+    await expect(navigation).toBeVisible();
+  });
+
+  test('closing the camera does not focus the manual input', async ({
+    page,
+  }) => {
+    const input = page.getByLabel('USB-сканер или строка DataMatrix');
+    const navigation = page.locator('.mobile-navigation');
+    await input.tap();
+    await expect(navigation).toBeHidden();
+    await page.getByRole('button', { name: 'Сканировать камерой' }).tap();
+    const camera = page.getByRole('dialog', { name: 'Сканирование' });
+    await expect(camera).toBeVisible();
+    await camera.getByRole('button', { name: 'Закрыть камеру' }).tap();
+    await expect(camera).toBeHidden();
+    await expect(input).not.toBeFocused();
+    await expect(navigation).toBeVisible();
+  });
+});
+
 test('camera decodes a GS1 DataMatrix frame and stops the stream after receipt', async ({
   page,
 }) => {

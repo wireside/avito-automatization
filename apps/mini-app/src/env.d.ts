@@ -17,6 +17,7 @@ interface Window {
       initData: string;
       ready(): void;
       expand(): void;
+      hideKeyboard?(): void;
       openLink?(url: string, options?: { try_instant_view?: boolean }): void;
       isVersionAtLeast?(version: string): boolean;
       onEvent?(event: 'themeChanged' | 'activated', handler: () => void): void;
