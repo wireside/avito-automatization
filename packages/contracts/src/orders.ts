@@ -53,6 +53,9 @@ export const marketplaceOrderSchema = z.object({
     trackingNumber: nullableText,
     dispatchNumber: nullableText,
   }),
+  returnPolicy: z
+    .object({ returnStatus: nullableText, trackingNumber: nullableText })
+    .optional(),
   availableActions: z.array(
     z.object({ name: z.string(), required: z.boolean() }),
   ),

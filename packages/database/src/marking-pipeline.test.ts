@@ -346,18 +346,66 @@ const url =
         evidenceReference: 'carrier:1',
         occurredOutsideApp: false,
       });
-      await command('return', {
-        shipmentId: id,
+      const returnScan = {
         raw: f.raw,
         scannerProfile: 'camera-gs1-v1',
-        kind: 'UNCLAIMED',
         condition: 'GOOD',
-        paid: false,
         occurredAt: new Date().toISOString(),
-        evidenceReference: 'carrier:return',
-        note: 'Целый товар',
+      };
+      const submittedBeforeReturn = legal.submit.mock.calls.length;
+      const received = await command('scanReturn', returnScan);
+      expect(received.result).toMatchObject({ status: 'PENDING_CHZ' });
+      const { returnId, operationId } = received.result as {
+        returnId: string;
+        operationId: string;
+      };
+      expect((await pipeline.read(actor, 'returns')).data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: returnId, status: 'PENDING_CHZ' }),
+        ]),
+      );
+      expect(await command('scanReturn', returnScan)).toMatchObject({
+        replayed: true,
+        result: { returnId },
       });
+      codes.set(f.cis, {
+        ...codes.get(f.cis)!,
+        ownerInn: '',
+        observedAt: new Date().toISOString(),
+      });
+      await process(operationId);
+      expect(legal.submit.mock.calls).toHaveLength(submittedBeforeReturn);
+      expect((await pipeline.read(actor, 'returns')).data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: returnId,
+            status: 'PENDING_CHZ',
+            legal_status: 'PREPARING',
+          }),
+        ]),
+      );
+      expect((await pipeline.read(actor, 'unit', f.unitId)).data).toMatchObject(
+        { current_state: 'QUARANTINE', legal_state: 'WITHDRAWN' },
+      );
+      await command('check', { unitId: f.unitId });
       await drain();
+      expect(legal.submit.mock.calls).toHaveLength(submittedBeforeReturn + 1);
+      const submittedReturn = legal.submit.mock.lastCall?.[0];
+      expect(submittedReturn?.type).toBe('LP_RETURN');
+      const returnPayload: unknown = JSON.parse(
+        Buffer.from(submittedReturn!.payloadBase64, 'base64').toString('utf8'),
+      );
+      expect(returnPayload).toEqual({
+        trade_participant_inn: inn,
+        return_type: 'REMOTE_SALE_RETURN',
+        paid: false,
+        products_list: [{ ki: f.cis }],
+      });
+      expect((await pipeline.read(actor, 'returns')).data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: returnId, status: 'COMPLETED' }),
+        ]),
+      );
       expect((await pipeline.read(actor, 'unit', f.unitId)).data).toMatchObject(
         { current_state: 'AVAILABLE', legal_state: 'IN_CIRCULATION' },
       );

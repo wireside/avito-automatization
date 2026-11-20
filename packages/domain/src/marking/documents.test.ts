@@ -42,30 +42,23 @@ it('omits the entire basis when Avito has no marketplace number', () => {
     products: [{ cis: base.items[0]!.cis, product_cost: 250000 }],
   });
 });
-it('requires actual paid fact for return and primary document for a paid return', () => {
-  expect(() =>
-    buildClothingDocument({
-      ...base,
-      action: 'RETURN',
-      reason: 'CUSTOMER_RETURN',
-    }),
-  ).toThrow('RETURN_PAYMENT_FACT_REQUIRED');
+it('builds a distance return with paid false and no primary document fields', () => {
   expect(
     buildClothingDocument({
       ...base,
       action: 'RETURN',
       reason: 'CUSTOMER_RETURN',
-      paid: false,
-    }).body,
-  ).not.toHaveProperty('primary_document_number');
-  expect(() =>
-    buildClothingDocument({
-      ...base,
-      action: 'RETURN',
-      reason: 'CUSTOMER_RETURN',
-      paid: true,
+      primaryDocument: { number: '127', date: '2026-11-20', name: 'Чек' },
     }),
-  ).toThrow('PRIMARY_DOCUMENT_REQUIRED');
+  ).toEqual({
+    type: 'LP_RETURN',
+    body: {
+      trade_participant_inn: base.sellerInn,
+      return_type: 'REMOTE_SALE_RETURN',
+      paid: false,
+      products_list: [{ ki: base.items[0]!.cis }],
+    },
+  });
 });
 it('separates whole-document cancellation and disposal from a consumer return', () => {
   expect(

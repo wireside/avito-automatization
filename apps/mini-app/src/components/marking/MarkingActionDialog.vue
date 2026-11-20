@@ -31,11 +31,6 @@ const titles: Partial<Record<MarkingAction, string>> = {
   retry: 'Повтор фоновой операции',
   correctDocument: 'Исправить отклонённые строки',
 };
-const hasDocument = computed(
-  () =>
-    props.action === 'dispose' ||
-    (props.action === 'return' && f.value.paid === 'true'),
-);
 const fields = computed<[string, string][]>(() => {
   switch (props.action) {
     case 'supply':
@@ -71,7 +66,6 @@ watch(open, (value) => {
       ...props.defaults,
       kind: 'CUSTOMER',
       condition: 'GOOD',
-      paid: '',
       occurredAt:
         props.action === 'return' || props.action === 'dispose'
           ? new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
@@ -156,17 +150,12 @@ async function submit() {
         occurredOutsideApp: props.handoverOutsideApp ?? false,
       });
     if (props.action === 'return') {
-      if (!['true', 'false'].includes(f.value.paid ?? '')) {
-        invalid.value = 'Уточните факт оплаты. Не выбирайте значение наугад.';
-        return;
-      }
       Object.assign(payload, {
         shipmentId: props.entityId,
         raw: f.value.raw,
         scannerProfile: scannerProfile.value,
         kind: f.value.kind,
         condition: f.value.condition,
-        paid: f.value.paid === 'true',
         note: f.value.note || `Приём возврата: ${f.value.condition}`,
       });
     }
@@ -176,7 +165,7 @@ async function submit() {
         reason: f.value.reason,
         confirmation: 'CONFIRM_IRREVERSIBLE',
       });
-    if (hasDocument.value)
+    if (props.action === 'dispose')
       payload.primaryDocument = {
         number: f.value.number,
         date: f.value.date,
@@ -234,9 +223,8 @@ function capture(raw: string) {
               :spellcheck="false"
               class="mb-3"
               :single-line="false"
-              @update:model-value="scannerProfile = 'keyboard-gs1-v1'" /><v-btn
-              class="mb-3"
-              @click="camera = true"
+              @update:model-value="scannerProfile = 'keyboard-gs1-v1'"
+            /><v-btn class="mb-3" @click="camera = true"
               >Сканировать камерой</v-btn
             ><v-select
               :model-value="f.kind ?? ''"
@@ -247,7 +235,8 @@ function capture(raw: string) {
               ]"
               class="mb-3"
               :single-line="false"
-              @update:model-value="f.kind = $event ?? ''" /><v-select
+              @update:model-value="f.kind = $event ?? ''"
+            /><v-select
               :model-value="f.condition ?? ''"
               label="Состояние вещи"
               :items="[
@@ -258,22 +247,13 @@ function capture(raw: string) {
               ]"
               class="mb-3"
               :single-line="false"
-              @update:model-value="f.condition = $event ?? ''" />
+              @update:model-value="f.condition = $event ?? ''"
+            />
             <p class="text-body-small text-secondary mb-3">
               Если скан невозможен — нужна помощь владельца. Восстановление кода
               здесь недоступно.
             </p>
-            <v-select
-              :model-value="f.paid ?? ''"
-              label="Подтверждённый факт оплаты"
-              :items="[
-                { title: 'Оплата подтверждена', value: 'true' },
-                { title: 'Оплаты не было', value: 'false' },
-              ]"
-              class="mb-3"
-              :single-line="false"
-              @update:model-value="f.paid = $event ?? ''"
-          /></template>
+          </template>
           <v-select
             v-if="action === 'dispose'"
             :model-value="f.reason ?? ''"
@@ -301,7 +281,7 @@ function capture(raw: string) {
             label="Идентификаторы экземпляров · по одному в строке"
             :single-line="false"
           />
-          <template v-if="hasDocument"
+          <template v-if="action === 'dispose'"
             ><p class="text-body-small text-secondary mb-3">
               Реквизиты первичного документа
             </p>

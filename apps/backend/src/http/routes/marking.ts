@@ -74,6 +74,7 @@ export function registerMarkingRoutes(
     ['integrations', 'integrations'],
     ['shipments', 'shipments'],
     ['shipments/:id', 'shipment'],
+    ['returns', 'returns'],
     ['units/:id', 'unit'],
     ['documents', 'documents'],
     ['documents/:id', 'document'],

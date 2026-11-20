@@ -6,7 +6,11 @@ import {
   type MarkingWorkStore,
 } from '@avito/domain';
 import type { Database } from './client.js';
-import type { PipelineProtection } from './marking-pipeline.js';
+import {
+  makeDocument,
+  releaseReturn,
+  type PipelineProtection,
+} from './marking-pipeline.js';
 import { connectedSellerInn } from './warehouses.js';
 type Row = Record<string, unknown>;
 const str = (r: Row, k: string) => (typeof r[k] === 'string' ? r[k] : '');
@@ -177,9 +181,84 @@ export function createMarkingWorkStore(
             sql`SELECT id FROM unit_markings WHERE unit_id=${work.unitId} AND retired_at IS NULL`,
           )
         ).rows[0]!;
+        const regular = ['', 'EMPTY'].includes(observation.statusEx);
+        const owned =
+          !!work.sellerInn &&
+          observation.ownerInn === work.sellerInn &&
+          regular;
         await tx.execute(
-          sql`INSERT INTO unit_marking_events(marking_id,state,provider_state,source,source_event_id,ownership_verified,operation_id,observed_at) VALUES(${mark.id},${state}::chz_legal_state,${observation.status},'TRUE_API',${op},${observation.ownerInn === work.sellerInn && ['', 'EMPTY'].includes(observation.statusEx) ? 'VERIFIED' : 'REJECTED'},${op},${observation.observedAt}::timestamptz)`,
+          sql`INSERT INTO unit_marking_events(marking_id,state,provider_state,source,source_event_id,ownership_verified,operation_id,observed_at) VALUES(${mark.id},${state}::chz_legal_state,${observation.status},'TRUE_API',${op},${owned ? 'VERIFIED' : 'REJECTED'},${op},${observation.observedAt}::timestamptz)`,
         );
+        const alreadyInCirculation = state === 'IN_CIRCULATION' && owned;
+        const canSubmitReturn =
+          state === 'WITHDRAWN' && regular && (!observation.ownerInn || owned);
+        if (alreadyInCirculation || canSubmitReturn) {
+          const receipt = (
+            await tx.execute<{
+              id: string;
+              sale_cycle_id: string;
+              warehouse_id: string;
+              received_at: string;
+              issue_id: string;
+            }>(
+              sql`SELECT r.id, si.sale_cycle_id, r.warehouse_id, r.received_at::text, mi.id AS issue_id
+                FROM returns r
+                JOIN marking_issues mi ON mi.entity_id=r.id AND mi.resolved_at IS NULL
+                JOIN return_items ri ON ri.return_id=r.id AND ri.condition='GOOD'
+                JOIN shipment_items si ON si.id=ri.shipment_item_id
+                JOIN sale_cycles sc ON sc.id=si.sale_cycle_id AND sc.closed_at IS NULL
+                JOIN product_units u ON u.id=ri.unit_id AND u.current_state='QUARANTINE'
+                JOIN inventory_movements mv ON mv.unit_id=u.id AND mv.unit_revision=u.movement_revision AND mv.return_item_id=ri.id
+                JOIN marking_pipeline_settings st ON st.warehouse_id=r.warehouse_id AND st.seller_inn=${work.sellerInn}
+                WHERE ri.unit_id=${work.unitId} AND r.status='INSPECTED'
+                  AND r.received_at<=${observation.observedAt}::timestamptz
+                  AND (mi.code='RETURN_CHZ_CHECK' OR
+                    (${alreadyInCirculation} AND mi.code='RETURN_AWAITING_CHZ'))
+                  AND (${alreadyInCirculation} OR EXISTS (SELECT 1 FROM chz_operations co
+                    WHERE co.sale_cycle_id=sc.id AND co.marking_id=${mark.id}
+                      AND co.action='WITHDRAW' AND co.reason='DISTANCE' AND co.status='CONFIRMED'))
+                  AND NOT EXISTS (SELECT 1 FROM unit_marking_events me
+                    WHERE me.marking_id=${mark.id} AND me.source='TRUE_API'
+                      AND me.observed_at>${observation.observedAt}::timestamptz)
+                  AND NOT EXISTS (SELECT 1 FROM chz_operations co
+                    WHERE co.marking_id=${mark.id} AND
+                      (co.return_id=r.id OR co.status IN
+                        ('PREPARING','WAITING_SIGNATURE','SUBMITTED','PROCESSING','UNKNOWN_RESULT','MANUAL_ATTENTION')))
+                ORDER BY r.received_at DESC LIMIT 1`,
+            )
+          ).rows[0];
+          if (receipt) {
+            if (alreadyInCirculation)
+              await releaseReturn(
+                tx,
+                work.unitId,
+                receipt.sale_cycle_id,
+                receipt.id,
+                receipt.warehouse_id,
+              );
+            else
+              await makeDocument(
+                protection,
+                tx,
+                op,
+                'RETURN',
+                'CUSTOMER_RETURN',
+                [
+                  {
+                    unitId: work.unitId,
+                    cycleId: receipt.sale_cycle_id,
+                    returnId: receipt.id,
+                  },
+                ],
+                receipt.warehouse_id,
+                receipt.received_at,
+                null,
+              );
+            await tx.execute(
+              sql`UPDATE marking_issues SET resolved_at=now() WHERE id=${receipt.issue_id}`,
+            );
+          }
+        }
         if (supplyVerified !== undefined && work.documentId)
           await tx.execute(
             sql`UPDATE marking_supply_evidence SET verified_at=${supplyVerified ? observation.observedAt : null}::timestamptz

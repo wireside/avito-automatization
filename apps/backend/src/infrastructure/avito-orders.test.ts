@@ -37,7 +37,7 @@ function setup(responses: Response[]) {
   });
   return { reader, fetch };
 }
-const page = (orders = [order]) =>
+const page = (orders: unknown[] = [order]) =>
   new Response(JSON.stringify({ orders, hasMore: false }));
 describe('Avito order observation', () => {
   it('uses only token POST and order GET, preserves long IDs, strips personal data and normalizes amounts', async () => {
@@ -82,6 +82,35 @@ describe('Avito order observation', () => {
     expect(new URL(fetch.mock.calls[2]![0]).searchParams.get('ids')).toBe(
       order.id,
     );
+  });
+  it('preserves the reverse tracking number separately from outbound delivery', async () => {
+    const { reader } = setup([
+      token(),
+      page([
+        {
+          ...order,
+          status: 'on_return',
+          returnPolicy: {
+            returnStatus: 'ready_to_pickup',
+            trackingNumber: 'RETURN-TEST',
+          },
+        },
+      ]),
+    ]);
+    expect(
+      await reader.list({ page: 1, limit: 20, status: 'on_return' }),
+    ).toMatchObject({
+      ok: true,
+      orders: [
+        {
+          delivery: { trackingNumber: 'TRACK-TEST' },
+          returnPolicy: {
+            returnStatus: 'ready_to_pickup',
+            trackingNumber: 'RETURN-TEST',
+          },
+        },
+      ],
+    });
   });
   it('refreshes token once on 401 and then stops', async () => {
     const { reader, fetch } = setup([

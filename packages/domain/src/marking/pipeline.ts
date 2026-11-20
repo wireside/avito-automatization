@@ -11,6 +11,7 @@ export type PipelineAction =
   | 'deliver'
   | 'cancel'
   | 'return'
+  | 'scanReturn'
   | 'dispose'
   | 'retry'
   | 'correctDocument';
@@ -90,6 +91,7 @@ export interface PipelineStore {
       | 'overview'
       | 'shipments'
       | 'shipment'
+      | 'returns'
       | 'unit'
       | 'documents'
       | 'document'

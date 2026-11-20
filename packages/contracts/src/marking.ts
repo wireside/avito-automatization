@@ -67,11 +67,20 @@ export const markingRequests = {
       ...scan,
       kind: z.enum(['CUSTOMER', 'UNCLAIMED']),
       condition: z.enum(['GOOD', 'DEFECTIVE', 'DAMAGED_CODE', 'WRONG_ITEM']),
-      paid: z.boolean(),
+      // Older clients can still send these fields. The return document supplies paid itself.
+      paid: z.boolean().optional(),
       primaryDocument: primaryDocument.optional(),
       occurredAt: at,
       evidenceReference: text,
       note: text,
+    })
+    .strict(),
+  scanReturn: z
+    .object({
+      ...base,
+      ...scan,
+      occurredAt: at,
+      condition: z.enum(['GOOD', 'DEFECTIVE', 'DAMAGED_CODE']).default('GOOD'),
     })
     .strict(),
   dispose: z
@@ -146,6 +155,7 @@ export function markingOpenApiPaths() {
     'integrations',
     'shipments',
     'shipments/{id}',
+    'returns',
     'units/{id}',
     'documents',
     'documents/{id}',

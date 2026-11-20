@@ -6,7 +6,7 @@ const raw = defineModel<string>({ required: true });
 const props = defineProps<{
   disabled: boolean;
   cameraOpen: boolean;
-  purpose?: 'pack';
+  purpose?: 'pack' | 'return';
 }>();
 const titleId = useId();
 const emit = defineEmits<{
@@ -33,16 +33,24 @@ defineExpose({ focus });
   <v-card :border="!mdAndUp" class="pa-4 pa-md-5" :aria-labelledby="titleId">
     <h2 :id="titleId" class="text-title-medium d-flex align-center ga-2">
       <DesignIcon :name="mdAndUp ? 'scanDesktop' : 'scan'" />{{
-        purpose === 'pack' ? 'Сканировать для упаковки' : 'Добавить товар'
+        purpose === 'return'
+          ? 'Сканировать возврат'
+          : purpose === 'pack'
+            ? 'Сканировать для упаковки'
+            : 'Добавить товар'
       }}
     </h2>
     <p class="text-body-small text-secondary mt-3 mb-4">
-      Сканируйте код «Честного знака»
+      {{
+        purpose === 'return'
+          ? 'Осмотрите полученную пару и сканируйте DataMatrix с её бирки.'
+          : 'Сканируйте код «Честного знака»'
+      }}
     </p>
     <form @submit.prevent="emit('submit')">
       <div class="d-flex ga-3 align-start">
         <v-text-field
-          id="scan-input"
+          :id="purpose === 'return' ? titleId + '-scan' : 'scan-input'"
           ref="field"
           v-model="raw"
           class="flex-grow-1 min-w-0"
@@ -70,7 +78,7 @@ defineExpose({ focus });
         /></v-btn>
       </div>
       <p class="text-label-small text-secondary d-flex align-center ga-2 mt-3">
-        <DesignIcon name="usb" />USB-сканер · добавление по Enter или Tab
+        <DesignIcon name="usb" />USB-сканер · Enter или Tab
       </p>
       <v-btn
         v-if="raw && !disabled"
@@ -79,19 +87,26 @@ defineExpose({ focus });
         color="primary-strong"
         class="mt-3"
         >{{
-          purpose === 'pack' ? 'Назначить вещь' : 'Добавить со сканера'
+          purpose === 'return'
+            ? 'Обработать скан'
+            : purpose === 'pack'
+              ? 'Назначить вещь'
+              : 'Добавить со сканера'
         }}</v-btn
       >
     </form>
     <v-btn
-      v-if="mdAndUp"
+      v-if="mdAndUp && purpose !== 'return'"
       block
       color="primary-soft"
       class="text-primary mt-4"
       @click="emit('phone')"
       ><DesignIcon name="phone" class="mr-2" />Сканировать телефоном</v-btn
     >
-    <p v-if="mdAndUp" class="text-body-small text-muted mt-4">
+    <p
+      v-if="mdAndUp && purpose !== 'return'"
+      class="text-body-small text-muted mt-4"
+    >
       {{
         purpose === 'pack'
           ? 'Назначаем уже принятую вещь этой посылке. Остаток не увеличивается.'

@@ -1,11 +1,14 @@
 import { computed, ref, watch } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { createOrdersApi } from '../orders-api';
-export function useOrders(initData: string) {
+export function useOrders(
+  initData: string,
+  initialOrderId: string | null = null,
+) {
   const api = createOrdersApi(initData);
   const status = ref('');
   const page = ref(1);
-  const selectedId = ref<string | null>(null);
+  const selectedId = ref(initialOrderId);
   const search = ref('');
   watch(status, () => {
     page.value = 1;

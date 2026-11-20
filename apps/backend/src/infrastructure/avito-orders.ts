@@ -35,6 +35,9 @@ const orderSchema = z.object({
     trackingNumber: text,
     dispatchNumber: text,
   }),
+  returnPolicy: z
+    .object({ returnStatus: text, trackingNumber: text })
+    .nullish(),
   availableActions: z
     .array(z.object({ name: z.string(), required: z.boolean() }))
     .nullish(),
@@ -78,6 +81,14 @@ function mapOrder(o: z.infer<typeof orderSchema>): MarketplaceOrder {
       trackingNumber: o.delivery.trackingNumber ?? null,
       dispatchNumber: o.delivery.dispatchNumber ?? null,
     },
+    ...(o.returnPolicy
+      ? {
+          returnPolicy: {
+            returnStatus: o.returnPolicy.returnStatus ?? null,
+            trackingNumber: o.returnPolicy.trackingNumber ?? null,
+          },
+        }
+      : {}),
     availableActions: o.availableActions ?? [],
   };
 }

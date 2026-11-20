@@ -13,7 +13,6 @@ export interface ClothingDocumentInput {
   effectiveAt: string;
   items: { cis: string; salePriceKopecks?: number }[];
   avitoOrder?: { marketplaceId: string; basisAt: string };
-  paid?: boolean;
   primaryDocument?: PrimaryDocument;
   cancelledDocumentId?: string;
 }
@@ -42,34 +41,16 @@ export function buildClothingDocument(input: ClothingDocumentInput): {
       body: { inn: input.sellerInn, lk_receipt_id: input.cancelledDocumentId },
     };
   }
-  if (input.action === 'RETURN') {
-    requirePipeline(
-      typeof input.paid === 'boolean',
-      'RETURN_PAYMENT_FACT_REQUIRED',
-    );
-    requirePipeline(
-      !input.paid || input.primaryDocument,
-      'PRIMARY_DOCUMENT_REQUIRED',
-    );
-    const d = input.primaryDocument;
+  if (input.action === 'RETURN')
     return {
       type: 'LP_RETURN',
       body: {
         trade_participant_inn: input.sellerInn,
         return_type: 'REMOTE_SALE_RETURN',
-        paid: input.paid,
-        ...(input.paid && d
-          ? {
-              primary_document_type: 'OTHER',
-              primary_document_number: d.number,
-              primary_document_date: d.date,
-              primary_document_custom_name: d.name,
-            }
-          : {}),
+        paid: false,
         products_list: input.items.map((i) => ({ ki: i.cis })),
       },
     };
-  }
   const sale = input.action === 'WITHDRAW';
   requirePipeline(
     sale

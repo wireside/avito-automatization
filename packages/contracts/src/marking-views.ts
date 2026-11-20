@@ -40,6 +40,22 @@ export const shipmentSchema = shipmentHeaderSchema.extend({
   items: z.array(shipmentLineSchema),
 });
 export const shipmentsSchema = z.array(shipmentHeaderSchema);
+export const returnReceiptsSchema = z.array(
+  z.object({
+    id,
+    external_order_id: z.string(),
+    marketplace_order_id: text,
+    name: z.string(),
+    received_at: z.string(),
+    status: z.enum([
+      'COMPLETED',
+      'PENDING_CHZ',
+      'AWAITING_CHZ_RETURN',
+      'REVIEW',
+    ]),
+    legal_status: text,
+  }),
+);
 export const unitLegalSchema = z.object({
   id,
   current_state: z.string(),

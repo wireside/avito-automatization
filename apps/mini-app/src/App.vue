@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, defineAsyncComponent } from 'vue';
+import { computed, ref, watch, defineAsyncComponent } from 'vue';
 import { useDisplay } from 'vuetify';
 import OrdersView from './components/OrdersView.vue';
 import WarehouseView from './components/WarehouseView.vue';
@@ -11,9 +11,25 @@ import { layout } from './design/tokens';
 const MarkingPipelineView = defineAsyncComponent(
   () => import('./components/marking/MarkingPipelineView.vue'),
 );
+const ReturnsView = defineAsyncComponent(
+  () => import('./components/marking/ReturnsView.vue'),
+);
 const { mdAndUp } = useDisplay();
 const mobileInputActive = useMobileInput(mdAndUp);
 const activePage = ref('warehouse');
+const returnsOpened = ref(false);
+watch(activePage, (page) => {
+  if (page === 'returns') returnsOpened.value = true;
+});
+const initialOrderId = ref<string | null>(null);
+function navigate(page: string) {
+  initialOrderId.value = null;
+  activePage.value = page;
+}
+function openAvitoOrder(id: string) {
+  initialOrderId.value = id;
+  activePage.value = 'orders';
+}
 const initData = window.Telegram?.WebApp.initData ?? '';
 const session = useTelegramSession(initData);
 const authenticated = computed(() => session.isSuccess.value);
@@ -52,12 +68,31 @@ const navigation = computed<
       { label: 'Заказы', icon: 'orders', value: 'orders' },
       { label: 'Упаковка', icon: 'warehouseSmall', value: 'packing' },
       { label: 'Склад', icon: 'warehouse', value: 'warehouse' },
+      { label: 'Возвраты', icon: 'returns', value: 'returns' },
       { label: 'Проблемы', icon: 'info', value: 'issues' },
       ...(owner.value
         ? [{ label: 'Настройки', icon: 'team' as const, value: 'settings' }]
         : []),
     ] as const,
 );
+const moreSections = computed(() =>
+  navigation.value.filter(({ value }) =>
+    ['issues', 'settings'].includes(value),
+  ),
+);
+const mobileNavigation = computed(() => [
+  ...navigation.value.filter(
+    ({ value }) => !['issues', 'settings'].includes(value),
+  ),
+  { label: 'Ещё', icon: 'more' as const, value: 'more' },
+]);
+const mobilePage = computed({
+  get: () =>
+    ['issues', 'settings'].includes(activePage.value)
+      ? 'more'
+      : activePage.value,
+  set: (page: string) => navigate(page),
+});
 </script>
 <template>
   <v-app>
@@ -99,7 +134,7 @@ const navigation = computed<
               ? 'bg-primary-soft text-primary'
               : 'text-secondary'
           "
-          @click="activePage = item.value"
+          @click="navigate(item.value)"
           ><template #prepend
             ><DesignIcon
               monochrome
@@ -159,8 +194,43 @@ const navigation = computed<
           v-if="authenticated && stockAllowed && activePage === 'orders'"
           :roles="roles"
           :init-data="initData"
-          @work-started="activePage = 'packing'"
+          :initial-order-id="initialOrderId"
+          @work-started="navigate('packing')"
         />
+        <ReturnsView
+          v-if="
+            authenticated &&
+            stockAllowed &&
+            (activePage === 'returns' || returnsOpened)
+          "
+          v-show="activePage === 'returns'"
+          :active="activePage === 'returns'"
+          :roles="roles"
+          :init-data="initData"
+          @open-order="openAvitoOrder"
+        />
+        <section
+          v-if="authenticated && stockAllowed && activePage === 'more'"
+          aria-labelledby="more-title"
+        >
+          <h1 id="more-title" class="text-title-large mb-5">Ещё</h1>
+          <div class="more-sections">
+            <v-card
+              v-for="item in moreSections"
+              :key="item.value"
+              border
+              class="pa-4 d-flex flex-column align-start justify-space-between ga-4"
+              min-height="110"
+              link
+              @click="navigate(item.value)"
+            >
+              <v-avatar rounded="md" color="primary-soft" class="text-primary">
+                <DesignIcon :name="item.icon" monochrome />
+              </v-avatar>
+              <span class="text-title-small">{{ item.label }}</span>
+            </v-card>
+          </div>
+        </section>
         <MarkingPipelineView
           v-if="authenticated && stockAllowed"
           v-show="['packing', 'issues', 'settings'].includes(activePage)"
@@ -220,7 +290,7 @@ const navigation = computed<
     </v-main>
     <v-bottom-navigation
       v-if="authenticated && stockAllowed && !mdAndUp && !mobileInputActive"
-      v-model="activePage"
+      v-model="mobilePage"
       :height="layout.bottomNavigationHeight"
       grow
       color="primary"
@@ -230,7 +300,7 @@ const navigation = computed<
       class="mobile-navigation border"
     >
       <v-btn
-        v-for="item in navigation"
+        v-for="item in mobileNavigation"
         :key="item.value"
         :value="item.value"
         :disabled="false"
@@ -242,8 +312,9 @@ const navigation = computed<
         color="secondary"
         rounded="md"
         class="px-1 my-3"
-        :class="item.value === activePage ? 'bg-primary-soft' : ''"
-        :title="true ? item.label : `${item.label} — скоро`"
+        :class="item.value === mobilePage ? 'bg-primary-soft' : ''"
+        :title="item.label"
+        @click="navigate(item.value)"
         ><DesignIcon
           monochrome
           :name="
@@ -258,3 +329,12 @@ const navigation = computed<
     </v-bottom-navigation>
   </v-app>
 </template>
+
+<style scoped>
+.more-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 560px;
+}
+</style>

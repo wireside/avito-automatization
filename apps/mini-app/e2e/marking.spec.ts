@@ -328,7 +328,7 @@ test('document partial results, received signature and explicit export', async (
   await page.getByRole('button', { name: 'Скачать JSON', exact: true }).click();
   expect((await download).suggestedFilename()).toBe(`document-${docId}.json`);
 });
-test('return requests payment evidence only for paid returns', async ({
+test('shipment return can be recorded without payment information', async ({
   page,
 }) => {
   const requests = await setup(page, { status: 'HANDED_OVER' });
@@ -339,11 +339,6 @@ test('return requests payment evidence only for paid returns', async ({
     page.getByRole('textbox', { name: 'Номер документа', exact: true }),
   ).toHaveCount(0);
   await page.getByLabel('Код возвращённой вещи', { exact: true }).fill(raw);
-  await page.getByLabel('Подтверждённый факт оплаты', { exact: true }).focus();
-  await page.keyboard.press('ArrowDown');
-  await page
-    .getByRole('option', { name: 'Оплаты не было', exact: true })
-    .click();
   await page
     .getByLabel('Подтверждение получения возврата', { exact: true })
     .fill('return-receipt-test');
@@ -359,7 +354,9 @@ test('return requests payment evidence only for paid returns', async ({
       'Возврат получен. Исправная вещь будет доступна только после юридического восстановления.',
     ),
   ).toBeVisible();
-  expect(requests.find((x) => x.action === 'return')?.body.paid).toBe(false);
+  expect(
+    requests.find((x) => x.action === 'return')?.body.paid,
+  ).toBeUndefined();
   expect(
     requests.find((x) => x.action === 'return')?.body.primaryDocument,
   ).toBeUndefined();
@@ -578,3 +575,112 @@ for (const client of ['native', 'missing', 'throws'] as const)
       }
     }
   });
+
+test('returns page records a scan and waits for CHZ to confirm availability', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await setup(page);
+  const orderId = '55000000000000001';
+  const marketplaceId = '70000000000000001';
+  await page.route('**/api/v1/orders?**', (route) => {
+    expect(new URL(route.request().url()).searchParams.get('status')).toBe(
+      'on_return',
+    );
+    return route.fulfill({
+      json: {
+        ok: true,
+        mode: 'read_only',
+        fetchedAt: at,
+        hasMore: false,
+        orders: [
+          {
+            id: orderId,
+            marketplaceId,
+            status: 'on_return',
+            createdAt: at,
+            updatedAt: at,
+            items: [
+              {
+                avitoId: '123',
+                title: 'Брюки прямые',
+                quantity: 1,
+                priceMinor: 250000,
+              },
+            ],
+            priceMinor: 250000,
+            schedules: { confirmTill: null, shipTill: null },
+            delivery: {
+              serviceName: null,
+              serviceType: null,
+              trackingNumber: null,
+              dispatchNumber: null,
+            },
+            returnPolicy: {
+              returnStatus: 'ready_to_pickup',
+              trackingNumber: 'RET-10001',
+            },
+            availableActions: [],
+          },
+        ],
+      },
+    });
+  });
+  const scans: Record<string, unknown>[] = [];
+  let status = 'PENDING_CHZ';
+  await page.route('**/api/v1/marking/commands/scanReturn', (route) => {
+    scans.push(route.request().postDataJSON() as Record<string, unknown>);
+    return route.fulfill({
+      json: { ok: true, replayed: false, result: { returnId: uuid(18) } },
+    });
+  });
+  await page.route('**/api/v1/marking/returns', (route) =>
+    route.fulfill({
+      json: {
+        data: scans.length
+          ? [
+              {
+                id: uuid(18),
+                external_order_id: orderId,
+                marketplace_order_id: marketplaceId,
+                name: 'Брюки прямые',
+                received_at: at,
+                status,
+                legal_status: null,
+              },
+            ]
+          : [],
+      },
+    }),
+  );
+  await page.getByRole('button', { name: 'Возвраты', exact: true }).click();
+  await expect(
+    page.getByText('№' + marketplaceId + ' · Трек RET-10001', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Можно забрать', { exact: true })).toBeVisible();
+  const input = page
+    .getByRole('textbox', { name: 'USB-сканер или строка DataMatrix' })
+    .filter({ visible: true });
+  await input.fill(raw);
+  await input.press('Enter');
+  await expect(page.getByText('Ожидает ЧЗ', { exact: true })).toBeVisible();
+  expect(scans).toHaveLength(1);
+  expect(scans[0]).toMatchObject({ raw });
+  expect(scans[0]).not.toHaveProperty('shipmentId');
+  expect(scans[0]).not.toHaveProperty('paid');
+  expect(scans[0]).not.toHaveProperty('primaryDocument');
+  status = 'COMPLETED';
+  await page.getByRole('button', { name: 'Обновить' }).click();
+  await expect(
+    page.getByText('Принято на склад', { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole('button', { name: 'Ещё', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Ещё' })).toBeVisible();
+  await expect(page.getByText('Проблемы', { exact: true })).toBeVisible();
+  await expect(page.getByText('Настройки', { exact: true })).toBeVisible();
+});

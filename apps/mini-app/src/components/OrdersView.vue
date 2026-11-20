@@ -12,12 +12,16 @@ import {
   type MarketplaceOrderDto,
 } from '../orders-api';
 import ProductThumbnail from './ProductThumbnail.vue';
-const props = defineProps<{ initData: string; roles?: string[] }>();
+const props = defineProps<{
+  initData: string;
+  roles?: string[];
+  initialOrderId?: string | null;
+}>();
 const emit = defineEmits<{ workStarted: [] }>();
 const importOpen = ref(false);
 const { mdAndUp } = useDisplay();
 const { status, page, selectedId, search, orders, detail, visibleOrders } =
-  useOrders(props.initData);
+  useOrders(props.initData, props.initialOrderId);
 const current = computed(() => (selectedId.value ? detail : orders));
 const order = computed(() => detail.data.value?.order);
 const fetchedAt = computed(() =>

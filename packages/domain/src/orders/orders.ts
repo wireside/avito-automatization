@@ -36,6 +36,7 @@ export interface MarketplaceOrder {
     trackingNumber: string | null;
     dispatchNumber: string | null;
   };
+  returnPolicy?: { returnStatus: string | null; trackingNumber: string | null };
   availableActions: { name: string; required: boolean }[];
 }
 export type OrdersFailure = {
