@@ -139,7 +139,9 @@ watch(cameraOpen, (value) => {
           {{
             activeTab === 'stock'
               ? 'Наличие и резервы'
-              : 'Приёмка маркированной одежды'
+              : activeTab === 'session'
+                ? 'Результаты за текущую сессию'
+                : 'Приёмка маркированной одежды'
           }}
         </p>
       </div>
@@ -161,6 +163,7 @@ watch(cameraOpen, (value) => {
       </div>
     </header>
     <v-sheet
+      v-if="canReceive"
       color="surface"
       rounded="md"
       class="pa-1 mb-4 mb-md-5"

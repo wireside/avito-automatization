@@ -320,9 +320,9 @@ const mobilePage = computed({
           v-show="warehouseActive"
           :active="warehouseActive"
           :section="warehouseSection"
-          @update:section="warehouseActive && navigate($event)"
           :init-data="initData"
           :roles="roles"
+          @update:section="warehouseActive && navigate($event)"
         />
         <OrdersView
           v-if="authenticated && stockAllowed && activePage === 'orders'"
@@ -402,6 +402,8 @@ const mobilePage = computed({
     <v-bottom-navigation
       v-if="authenticated && stockAllowed && !mdAndUp && !mobileInputActive"
       v-model="mobilePage"
+      tag="nav"
+      aria-label="Основная навигация"
       :height="layout.bottomNavigationHeight"
       grow
       color="primary"
@@ -442,7 +444,7 @@ const mobilePage = computed({
   gap: 12px;
 }
 .app-section-card {
-  min-height: 136px;
+  min-height: 154px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
