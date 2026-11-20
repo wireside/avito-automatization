@@ -10,13 +10,12 @@ const props = defineProps<{
   entityId?: string;
   initData: string;
   defaults?: Record<string, string>;
-  outsideDefault?: boolean;
+  handoverOutsideApp?: boolean;
 }>();
 const emit = defineEmits<{ done: [] }>();
 const cmd = useMarkingCommand(props.initData);
 const f = ref<Record<string, string>>({});
 const checked = ref(false);
-const outside = ref(false);
 const camera = ref(false);
 const bulk = ref('');
 const invalid = ref('');
@@ -28,7 +27,6 @@ const titles: Partial<Record<MarkingAction, string>> = {
   return: 'Принять возврат',
   cancel: 'Отменить посылку',
   dispose: 'Утрата / уничтожение',
-  calendar: 'Календарь рабочих дней',
   supply: 'Документы поставщика',
   retry: 'Повтор фоновой операции',
   correctDocument: 'Исправить отклонённые строки',
@@ -83,25 +81,32 @@ watch(open, (value) => {
       reason: props.action === 'dispose' ? 'LOSS' : '',
     };
     checked.value = false;
-    outside.value = props.outsideDefault ?? false;
     bulk.value = '';
     invalid.value = '';
   }
   if (!value) camera.value = false;
 });
+function parseHandoverTime(value: string): number {
+  const match = /^(\d{2})\.(\d{2})\.(\d{4}) ([01]\d|2[0-3]):([0-5]\d)$/.exec(
+    value.trim(),
+  );
+  if (!match) return NaN;
+  const [, day, month, year, hour, minute] = match;
+  const iso = `${year}-${month}-${day}T${hour}:${minute}`;
+  const date = new Date(iso + 'Z');
+  // Date normalizes impossible days such as 31 February.
+  if (
+    !Number.isFinite(date.getTime()) ||
+    date.toISOString().slice(0, 16) !== iso
+  )
+    return NaN;
+  return Date.parse(iso + '+03:00');
+}
 async function submit() {
   invalid.value = '';
   if (cmd.pending.value) return;
   let payload: Record<string, unknown>;
-  if (props.action === 'calendar') {
-    try {
-      const days: unknown = JSON.parse(bulk.value);
-      payload = { days };
-    } catch {
-      invalid.value = 'Загрузите массив дат в формате JSON.';
-      return;
-    }
-  } else if (props.action === 'supply')
+  if (props.action === 'supply')
     payload = {
       documentNumber: f.value.documentNumber,
       documentDate: f.value.documentDate,
@@ -130,11 +135,15 @@ async function submit() {
       return;
     }
     const at =
-      outside.value || props.action !== 'handover'
-        ? new Date(f.value.occurredAt ?? '').getTime()
-        : Date.now();
+      props.action === 'handover'
+        ? props.handoverOutsideApp
+          ? parseHandoverTime(f.value.occurredAt ?? '')
+          : Date.now()
+        : new Date(f.value.occurredAt ?? '').getTime();
     if (!Number.isFinite(at)) {
-      invalid.value = 'Укажите фактическую дату и время.';
+      invalid.value = props.handoverOutsideApp
+        ? 'Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ.'
+        : 'Укажите фактическую дату и время.';
       return;
     }
     payload = {
@@ -144,7 +153,7 @@ async function submit() {
     if (props.action === 'handover')
       Object.assign(payload, {
         shipmentId: props.entityId,
-        occurredOutsideApp: outside.value,
+        occurredOutsideApp: props.handoverOutsideApp ?? false,
       });
     if (props.action === 'return') {
       if (!['true', 'false'].includes(f.value.paid ?? '')) {
@@ -191,15 +200,6 @@ function capture(raw: string) {
   f.value.raw = raw;
   scannerProfile.value = 'camera-gs1-v1';
   camera.value = false;
-}
-async function loadCalendar(files: File | File[] | null) {
-  const file = Array.isArray(files) ? files[0] : files;
-  if (!file) return;
-  if (file.size > 150000) {
-    invalid.value = 'Файл слишком большой.';
-    return;
-  }
-  bulk.value = await file.text();
 }
 </script>
 <template>
@@ -295,19 +295,6 @@ async function loadCalendar(files: File | File[] | null) {
             class="mb-3"
             :single-line="false"
           />
-          <template v-if="action === 'calendar'"
-            ><p class="text-body-small text-secondary mb-3">
-              Один пакет до 800 дат: [{"date":"2026-11-04","working":false}].
-              Выходные не определяются автоматически.
-            </p>
-            <v-file-input
-              label="Файл календаря JSON"
-              accept=".json,application/json"
-              @update:model-value="loadCalendar" /><v-textarea
-              v-model="bulk"
-              label="Даты календаря JSON"
-              :single-line="false"
-          /></template>
           <v-textarea
             v-if="action === 'supply'"
             v-model="bulk"
@@ -333,24 +320,22 @@ async function loadCalendar(files: File | File[] | null) {
               class="mb-3"
               :single-line="false"
           /></template>
-          <v-checkbox
-            v-if="action === 'handover'"
-            v-model="outside"
-            label="Уже передано вне приложения"
+          <v-text-field
+            v-if="action === 'handover' && handoverOutsideApp"
+            v-model="f.occurredAt"
+            label="Дата и время передачи (МСК)"
+            placeholder="ДД.ММ.ГГГГ ЧЧ:ММ"
+            autocomplete="off"
           />
           <v-text-field
-            v-if="
-              action === 'return' ||
-              action === 'dispose' ||
-              (action === 'handover' && outside)
-            "
+            v-if="action === 'return' || action === 'dispose'"
             v-model="f.occurredAt"
             type="datetime-local"
             label="Фактическая дата и время"
             :single-line="false"
           />
           <p
-            v-if="action === 'handover' && !outside"
+            v-if="action === 'handover' && !handoverOutsideApp"
             class="text-body-small text-secondary"
           >
             Фактическое время будет записано при подтверждении. Нужен настоящий

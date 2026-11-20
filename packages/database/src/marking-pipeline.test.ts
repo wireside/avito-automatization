@@ -295,19 +295,9 @@ const url =
         inn,
         actor.id,
       );
-      const days = [];
-      for (let i = -1; i < 40; i++) {
-        const d = new Date();
-        d.setUTCDate(d.getUTCDate() + i);
-        days.push({
-          date: d.toISOString().slice(0, 10),
-          working: ![0, 6].includes(d.getUTCDay()),
-        });
-      }
-      await command('calendar', { days });
     });
     afterAll(() => db.pool.end());
-    it('checks real provider-shaped evidence, reserves, packs, signs, dispatches and returns the same unit', async () => {
+    it('checks real provider-shaped evidence, reserves, packs, signs, dispatches without a calendar and returns the same unit', async () => {
       const f = await fixture(),
         id = await shipment(f);
       await command('pack', {

@@ -2,26 +2,14 @@
 import ChzConnectionPanel from './ChzConnectionPanel.vue';
 import WarehouseSettingsPanel from '../WarehouseSettingsPanel.vue';
 import IntegrationStatusBanner from './IntegrationStatusBanner.vue';
-import { computed, ref } from 'vue';
-import { useQuery } from '@tanstack/vue-query';
-import {
-  overviewSchema,
-  type MarkingAction,
-  signerInstallLinkResponse,
-} from '@avito/contracts';
-import { createMarkingApi } from '../../marking-api';
+import { ref } from 'vue';
+import { signerInstallLinkResponse } from '@avito/contracts';
 import MarkingActionDialog from './MarkingActionDialog.vue';
 const props = defineProps<{
   initData: string;
   active: boolean;
   roles: string[];
 }>();
-const api = createMarkingApi(props.initData);
-const overview = useQuery({
-  queryKey: ['marking', 'overview'],
-  queryFn: ({ signal }) => api.read('overview', overviewSchema, signal),
-  enabled: computed(() => props.active),
-});
 const installBusy = ref(false),
   installUrl = ref(''),
   installError = ref(''),
@@ -71,11 +59,6 @@ async function copyInstallLink() {
   }
 }
 const dialog = ref(false);
-const action = ref<MarkingAction>('supply');
-function open(value: MarkingAction) {
-  action.value = value;
-  dialog.value = true;
-}
 </script>
 <template>
   <section>
@@ -91,24 +74,9 @@ function open(value: MarkingAction) {
             Укажите документ поставщика один раз для партии. Backend проверит
             его обработку и состав в ЧЗ. Закупочная стоимость не требуется.
           </p>
-          <v-btn @click="open('supply')">Импортировать сведения</v-btn></v-card
+          <v-btn @click="dialog = true">Импортировать сведения</v-btn></v-card
         ></v-col
       ><v-col cols="12" md="5"
-        ><v-card class="pa-5 mb-4"
-          ><h2 class="text-title-medium mb-4">Рабочий календарь</h2>
-          <p v-if="overview.isError.value" class="text-body-small text-warning">
-            Не удалось получить состояние календаря.
-          </p>
-          <p v-else-if="overview.data.value" class="text-body-medium">
-            {{
-              overview.data.value.data.calendar_days
-                ? `Загружено дат: ${overview.data.value.data.calendar_days}`
-                : 'Календарь не загружен'
-            }}
-          </p>
-          <v-btn class="mt-4" @click="open('calendar')"
-            >Загрузить пакет дат</v-btn
-          ></v-card
         ><v-card class="pa-5"
           ><h2 class="text-title-medium mb-4">Локальный подписант</h2>
           <v-btn
@@ -171,9 +139,8 @@ function open(value: MarkingAction) {
       ></v-row
     ><MarkingActionDialog
       v-model="dialog"
-      :action="action"
+      action="supply"
       :init-data="initData"
-      @done="overview.refetch()"
     />
   </section>
 </template>

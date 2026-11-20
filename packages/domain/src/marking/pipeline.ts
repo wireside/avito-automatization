@@ -1,7 +1,6 @@
 import type { SessionUser } from '../auth/verify-telegram-session.js';
 
 export type PipelineAction =
-  | 'calendar'
   | 'supply'
   | 'check'
   | 'create'
@@ -55,23 +54,22 @@ export function legalBlockers(unit: PipelineSnapshot, now: Date): string[] {
   if (unit.pending) blockers.push('LEGAL_OPERATION_PENDING');
   return blockers;
 }
-/** Complete explicit calendar is required: holidays and working Saturdays cannot be inferred. */
+/** An exact deadline requires known working days. */
 export function dispatchDeadline(
   dispatchedAt: string,
   calendar: Readonly<Record<string, boolean>>,
   deliveredAt?: string,
-): string {
+): string | null {
   const local = new Date(Date.parse(dispatchedAt) + 3 * 3600_000);
   let remaining = 3;
   for (let days = 0; remaining > 0; days++) {
-    requirePipeline(days < 32, 'CALENDAR_INCOMPLETE');
+    if (days === 32) break;
     local.setUTCDate(local.getUTCDate() + 1);
     const key = local.toISOString().slice(0, 10);
-    requirePipeline(typeof calendar[key] === 'boolean', 'CALENDAR_INCOMPLETE', [
-      key,
-    ]);
+    if (typeof calendar[key] !== 'boolean') break;
     if (calendar[key]) remaining--;
   }
+  if (remaining > 0) return deliveredAt ?? null;
   const end = Date.parse(
     local.toISOString().slice(0, 10) + 'T23:59:59.999+03:00',
   );
@@ -120,7 +118,6 @@ export function createMarkingPipeline(
       input: PipelineInput,
     ) {
       const privileged = [
-        'calendar',
         'supply',
         'dispose',
         'retry',

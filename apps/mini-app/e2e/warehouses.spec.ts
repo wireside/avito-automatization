@@ -143,7 +143,9 @@ async function setup(
         },
       });
     if (path.endsWith('/overview'))
-      return r.fulfill({ json: { data: { calendar_days: 30 } } });
+      return r.fulfill({
+        json: { data: { packed: 0, ready: 0, issues: 0, pending: 0 } },
+      });
     return r.fulfill({ json: { data: [] } });
   });
   await page.goto('/');

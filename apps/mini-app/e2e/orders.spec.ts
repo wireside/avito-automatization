@@ -422,7 +422,7 @@ test('takes a real-order snapshot into packing, remembers the exact mapping requ
           certificate_expires_at: null,
         }
       : path.endsWith('overview')
-        ? { packed: 0, ready: 0, issues: 0, pending: 0, calendar_days: 40 }
+        ? { packed: 0, ready: 0, issues: 0, pending: 0 }
         : [];
     return r.fulfill({ json: { data } });
   });

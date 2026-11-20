@@ -20,9 +20,7 @@ describe('warehouse legal policy', () => {
     expect(
       dispatchDeadline('2026-11-04T20:00:00Z', days, '2026-11-06T08:00:00Z'),
     ).toBe('2026-11-06T08:00:00.000Z');
-    expect(() => dispatchDeadline('2026-11-04T20:00:00Z', {})).toThrow(
-      'CALENDAR_INCOMPLETE',
-    );
+    expect(dispatchDeadline('2026-11-04T20:00:00Z', {})).toBeNull();
   });
   it('requires a recent observation and verified ownership', () => {
     const u = {
@@ -63,7 +61,7 @@ describe('warehouse legal policy', () => {
     ).rejects.toThrow('FORBIDDEN');
     await createMarkingPipeline(store).command(
       { ...user, roles: ['OWNER'] },
-      'calendar',
+      'supply',
       { requestId: 'r' },
     );
     expect(store.execute).toHaveBeenCalledOnce();

@@ -11,15 +11,6 @@ const scan = {
   scannerProfile: z.enum(['camera-gs1-v1', 'keyboard-gs1-v1']),
 };
 export const markingRequests = {
-  calendar: z
-    .object({
-      ...base,
-      days: z
-        .array(z.object({ date: z.iso.date(), working: z.boolean() }).strict())
-        .min(1)
-        .max(800),
-    })
-    .strict(),
   supply: z
     .object({
       ...base,

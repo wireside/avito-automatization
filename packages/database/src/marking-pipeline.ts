@@ -303,13 +303,7 @@ export function createMarkingPipelineStore(
           };
         }
         let result: Row = {};
-        if (action === 'calendar') {
-          for (const day of arr(input, 'days'))
-            await tx.execute(
-              sql`INSERT INTO marking_business_days(date,working) VALUES(${String(day.date)},${day.working === true}) ON CONFLICT(date) DO UPDATE SET working=excluded.working`,
-            );
-          result = { count: arr(input, 'days').length };
-        } else if (action === 'supply') {
+        if (action === 'supply') {
           const ids = stringIds(input, 'unitIds');
           requirePipeline(new Set(ids).size === ids.length, 'DUPLICATE_UNIT');
           for (const id of [...ids].sort()) {
@@ -514,7 +508,6 @@ export function createMarkingPipelineStore(
               'SHIPMENT_NOT_PACKED',
             );
             const now = new Date().toISOString();
-            dispatchDeadline(now, await calendar(tx)); // Require an actual business calendar before preparing documents.
             for (const item of items) {
               requirePipeline(
                 item.packed_at && item.avito_marking_status === 'ACCEPTED',
@@ -575,13 +568,9 @@ export function createMarkingPipelineStore(
                   'LEGAL_NOT_READY',
                 );
               }
-            let due: string | null = null;
-            try {
-              due = dispatchDeadline(at, await calendar(tx));
-            } catch (error) {
-              if (!outside) throw error;
-              await issue(tx, 'CALENDAR_INCOMPLETE', shipmentId);
-            }
+            const due = outside
+              ? dispatchDeadline(at, await calendar(tx))
+              : null;
             const op = await header(
               tx,
               actorId,
@@ -1197,7 +1186,7 @@ export function createMarkingPipelineStore(
       else
         data = await first(
           db,
-          sql`SELECT (SELECT count(*)::int FROM shipments WHERE status='PACKED') AS packed,(SELECT count(*)::int FROM shipments WHERE status='READY') AS ready,(SELECT count(*)::int FROM marking_issues WHERE resolved_at IS NULL) AS issues,(SELECT count(*)::int FROM chz_operations WHERE status IN ${active}) AS pending,(SELECT count(*)::int FROM marking_business_days) AS calendar_days`,
+          sql`SELECT (SELECT count(*)::int FROM shipments WHERE status='PACKED') AS packed,(SELECT count(*)::int FROM shipments WHERE status='READY') AS ready,(SELECT count(*)::int FROM marking_issues WHERE resolved_at IS NULL) AS issues,(SELECT count(*)::int FROM chz_operations WHERE status IN ${active}) AS pending`,
         );
       return { data };
     },

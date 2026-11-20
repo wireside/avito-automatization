@@ -336,7 +336,7 @@ async function retry() {
     /><MarkingActionDialog
       v-model="dialog"
       :action="action"
-      :outside-default="outsideRequested"
+      :handover-outside-app="action === 'handover' && outsideRequested"
       :entity-id="id"
       :init-data="initData"
       @done="

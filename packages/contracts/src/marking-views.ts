@@ -57,7 +57,6 @@ export const overviewSchema = z.object({
   ready: z.number(),
   issues: z.number(),
   pending: z.number(),
-  calendar_days: z.number(),
 });
 export const issueSchema = z.object({
   id,

@@ -167,7 +167,7 @@ async function setup(
         certificate_expires_at: null,
       };
     if (path === 'overview')
-      data = { packed: 0, ready: 0, issues: 0, pending: 0, calendar_days: 30 };
+      data = { packed: 0, ready: 0, issues: 0, pending: 0 };
     if (path === 'shipments')
       data = [
         {
@@ -265,6 +265,37 @@ for (const width of [390, 1440])
       fullPage: true,
     });
   });
+test('records a manually entered Moscow handover time', async ({ page }) => {
+  const requests = await setup(page, { status: 'PACKED' });
+  await page.getByRole('button', { name: 'Другие действия' }).click();
+  await page.getByText('Уже передано вне приложения', { exact: true }).click();
+  await page
+    .getByLabel('Номер или ссылка подтверждения передачи')
+    .fill('carrier-receipt-test');
+  const time = page.getByRole('textbox', {
+    name: 'Дата и время передачи (МСК)',
+  });
+  await time.fill('31.02.2026 14:35');
+  await page
+    .getByRole('checkbox', { name: 'Подтверждаю фактическое событие' })
+    .check();
+  const confirm = page.getByRole('button', {
+    name: 'Подтвердить',
+    exact: true,
+  });
+  await confirm.click();
+  await expect(
+    page.getByText('Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ.'),
+  ).toBeVisible();
+  expect(requests).toHaveLength(0);
+  await time.fill('04.11.2026 14:35');
+  await confirm.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(requests.find((x) => x.action === 'handover')?.body).toMatchObject({
+    occurredAt: '2026-11-04T11:35:00.000Z',
+    occurredOutsideApp: true,
+  });
+});
 test('viewer never gets write actions', async ({ page }) => {
   await setup(page, { role: 'VIEWER', status: 'READY' });
   await expect(
@@ -348,6 +379,9 @@ test('settings separate CHZ connection from warehouses and hide internal fields'
   await expect(
     page.getByText('Склады и адреса отгрузки', { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByText('Рабочий календарь', { exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByLabel('Идентификатор склада', { exact: true }),
   ).toHaveCount(0);
