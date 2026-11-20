@@ -1,3 +1,4 @@
+import { createAvitoTransport } from '../infrastructure/avito-transport.js';
 import { createAvitoOrderLane } from '../infrastructure/avito-order-lane.js';
 import { assertCurrentShipment, readCurrentOrder } from '@avito/domain';
 import { readAvitoShipmentReference } from '@avito/database';
@@ -43,6 +44,14 @@ import { createOperationStore } from '../infrastructure/persistence.js';
 import { createIntegrationWorker } from '../jobs/integration-worker.js';
 
 export function createWorkerRuntime(config: AppConfig) {
+  const avitoTransport = createAvitoTransport(
+    config.AVITO_PROXY_ENABLED ? config.AVITO_PROXY_URL : undefined,
+  );
+  const avitoConnection = {
+    clientId: config.AVITO_API_CLIENT_ID,
+    clientSecret: config.AVITO_API_CLIENT_SECRET,
+    fetch: avitoTransport.fetch,
+  };
   const logger = createLogger(config.LOG_LEVEL);
   const database = createDatabaseClient(config.DATABASE_URL);
   const queueConnection = createRedisConnection(config.REDIS_URL);
@@ -105,8 +114,7 @@ export function createWorkerRuntime(config: AppConfig) {
   );
   const actionReader = createAvitoOrderReader({
     includePhotos: false,
-    clientId: config.AVITO_API_CLIENT_ID,
-    clientSecret: config.AVITO_API_CLIENT_SECRET,
+    ...avitoConnection,
     acquireReadSlot: createAvitoReadLimiter(
       queueConnection,
       config.AVITO_API_CLIENT_ID ?? 'unconfigured',
@@ -117,8 +125,7 @@ export function createWorkerRuntime(config: AppConfig) {
     legal,
     sendMarkings: createAvitoMarkingSender({
       readOrder: (id) => readCurrentOrder(actionReader, id),
-      clientId: config.AVITO_API_CLIENT_ID,
-      clientSecret: config.AVITO_API_CLIENT_SECRET,
+      ...avitoConnection,
       writesEnabled: config.AVITO_WRITES_ENABLED,
       acquireSlot: createAvitoReadLimiter(
         queueConnection,
@@ -150,8 +157,7 @@ export function createWorkerRuntime(config: AppConfig) {
     reader: actionReader,
     writesEnabled: config.AVITO_WRITES_ENABLED,
     provider: createAvitoActionProvider({
-      clientId: config.AVITO_API_CLIENT_ID,
-      clientSecret: config.AVITO_API_CLIENT_SECRET,
+      ...avitoConnection,
       writesEnabled: config.AVITO_WRITES_ENABLED,
       acquireSlot: createAvitoReadLimiter(
         queueConnection,
@@ -244,6 +250,7 @@ export function createWorkerRuntime(config: AppConfig) {
           workerConnection.quit(),
           database.pool.end(),
           legal.close(),
+          avitoTransport.close(),
         ]);
       })();
       return closing;

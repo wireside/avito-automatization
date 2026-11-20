@@ -24,11 +24,9 @@ import close from '../assets/figma/camera-536a4.svg';
 import flash from '../assets/figma/camera-f5bdd.svg';
 
 import returns from '../assets/figma/nav-returns.svg';
-import more from '../assets/figma/nav-more.svg';
 
 export const icons = {
   returns: { src: returns, width: 20, height: 20 },
-  more: { src: more, width: 20, height: 20 },
   ordersActive: { src: ordersActive, width: 20, height: 20 },
   warehouseInactive: { src: warehouseInactive, width: 20, height: 20 },
   home: { src: home, width: 20, height: 20 },

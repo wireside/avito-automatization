@@ -99,6 +99,7 @@ for (const width of [390, 1440]) {
       });
     });
     await page.goto('/');
+    await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
     const input = page.getByLabel('USB-сканер или строка DataMatrix');
     await input.fill(raw);
     await input.press('Enter');
@@ -116,7 +117,7 @@ for (const width of [390, 1440]) {
       fullPage: true,
     });
     await page.reload();
-    await page.getByRole('tab', { name: 'Остатки', exact: true }).click();
+    await page.getByRole('button', { name: 'Остатки', exact: true }).click();
     await expect(
       page.getByText(catalogFields.name, { exact: true }).first(),
     ).toBeVisible();
@@ -160,6 +161,7 @@ test('catalog outage creates no pending receipt and retry completes intake', asy
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill(raw);
   await input.press('Enter');
@@ -194,6 +196,7 @@ test('missing optional catalog attributes do not require a review', async ({
     }),
   );
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill(raw);
   await input.press('Enter');
@@ -234,6 +237,7 @@ test('USB scan is saved, displayed, deduplicated and remains visible after reloa
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   await expect(page.getByText('На складе пока пусто')).toBeVisible();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill(raw);
@@ -253,7 +257,7 @@ test('USB scan is saved, displayed, deduplicated and remains visible after reloa
   await expect(page.getByText('SCAN-test')).toBeVisible();
   await page.getByRole('button', { name: 'Закрыть экземпляры' }).click();
   await page.reload();
-  await page.getByRole('tab', { name: 'Остатки', exact: true }).click();
+  await page.getByRole('button', { name: 'Остатки', exact: true }).click();
   await expect(page.getByText('1 шт.')).toBeVisible();
   await expect(page.locator('body')).toHaveJSProperty('scrollWidth', 390);
   await page.screenshot({
@@ -283,6 +287,7 @@ test('retries an ambiguous response with the same request ID', async ({
     }
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill(raw);
   await input.press('Enter');
@@ -301,6 +306,7 @@ test('read-only user can view stock without intake controls', async ({
     route.fulfill({ json: pageData(1) }),
   );
   await page.goto('/');
+  await page.getByRole('button', { name: 'Остатки', exact: true }).click();
   await expect(page.getByText('1 шт.')).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Сканировать камерой' }),
@@ -322,6 +328,7 @@ test('camera errors are explained without a false successful receipt', async ({
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   await page.getByRole('button', { name: 'Сканировать камерой' }).click();
   await expect(page.getByText(/Не удалось открыть камеру/)).toBeVisible();
   await expect(
@@ -339,6 +346,7 @@ test.describe('mobile input', () => {
       route.fulfill({ json: pageData(0) }),
     );
     await page.goto('/');
+    await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   });
 
   test('hides navigation during editing and dismisses the keyboard on an outside tap', async ({
@@ -469,6 +477,7 @@ test('camera decodes a GS1 DataMatrix frame and stops the stream after receipt',
     'data:image/svg+xml;base64,' + fixture.toString('base64'),
   );
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   await page.getByRole('button', { name: 'Сканировать камерой' }).click();
   await expect(
     page.getByText('Товар добавлен на склад', { exact: true }),
@@ -508,6 +517,7 @@ for (const viewport of [
       }),
     );
     await page.goto('/');
+    await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
     const input = page.getByLabel('USB-сканер или строка DataMatrix');
     await input.fill(raw);
     await input.press('Enter');
@@ -583,6 +593,7 @@ test('search and pagination use HTTP parameters and preserve global totals', asy
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Остатки', exact: true }).click();
   await expect(page.getByText('1 шт.', { exact: true })).toBeVisible();
   await page.getByLabel('Поиск по складу').fill('чёрный M');
   await page.getByRole('button', { name: 'Найти', exact: true }).click();
@@ -625,6 +636,7 @@ test('validation failure keeps the code and never shows a successful receipt', a
     }),
   );
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill('invalid');
   await input.press('Enter');
@@ -650,6 +662,7 @@ test('USB keyboard FNC1 shortcut preserves GS bytes', async ({ page }) => {
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill('01' + gtin + '21TEST000000001');
   await input.press('End');
@@ -689,6 +702,7 @@ test('consecutive USB scans are queued without losing bytes or request identity'
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill(raw);
   await input.press('Enter');
@@ -725,6 +739,7 @@ test('confirms a committed receipt before a delayed stock refresh completes', as
     }),
   );
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   await expect(page.getByText('На складе пока пусто')).toBeVisible();
   const input = page.getByLabel('USB-сканер или строка DataMatrix');
   await input.fill(raw);
@@ -775,6 +790,7 @@ test('camera layout uses the design reticle and stops tracks when backgrounded',
     });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   await page.getByRole('button', { name: 'Сканировать камерой' }).click();
   await expect(page.getByLabel('Камера сканера')).toBeVisible();
   await expect
@@ -884,7 +900,7 @@ test('groups confirmed sizes and opens reserved pairs with the same filter', asy
     });
   });
   await page.goto('/');
-  await page.getByRole('tab', { name: 'Остатки', exact: true }).click();
+  await page.getByRole('button', { name: 'Остатки', exact: true }).click();
   const stock = page.getByRole('region', { name: 'Товары на складе' });
   await expect(
     stock.getByRole('heading', { name: 'Джинсы прямые' }),

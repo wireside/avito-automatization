@@ -110,9 +110,10 @@ async function setup(page: Page, imageUrl: string | null = null) {
   if (desktop)
     await page
       .getByRole('navigation', { name: 'Основная навигация' })
-      .getByText('Заказы', { exact: true })
+      .getByText('Продажи', { exact: true })
       .click();
-  else await page.getByRole('button', { name: 'Заказы', exact: true }).click();
+  else await page.getByRole('button', { name: 'Продажи', exact: true }).click();
+  await page.getByRole('button', { name: 'Заказы', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Заказы', exact: true }),
   ).toBeVisible();
@@ -241,12 +242,15 @@ test('keeps the intake input when switching from warehouse to orders and back', 
   await setup(page);
   const nav = page.getByRole('navigation', { name: 'Основная навигация' });
   await nav.getByText('Склад', { exact: true }).click();
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   const input = page.getByRole('textbox', {
     name: 'USB-сканер или строка DataMatrix',
   });
   await input.fill('UNSENT');
-  await nav.getByText('Заказы', { exact: true }).click();
+  await nav.getByText('Продажи', { exact: true }).click();
+  await page.getByRole('button', { name: 'Заказы', exact: true }).click();
   await nav.getByText('Склад', { exact: true }).click();
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   await expect(input).toHaveValue('UNSENT');
 });
 
@@ -283,6 +287,7 @@ test('shows the listing photo and falls back without breaking order navigation',
   await page.unroute(imageUrl);
   await page.route(imageUrl, (route) => route.abort());
   await page.reload();
+  await page.getByRole('button', { name: 'Продажи', exact: true }).click();
   await page.getByRole('button', { name: 'Заказы', exact: true }).click();
   await expect(
     page.locator('img[data-illustration="denim"]').first(),
@@ -502,22 +507,14 @@ for (const width of [320, 390, 430, 1512]) {
         elements.map((el) => ({
           color: getComputedStyle(el).color,
           opacity: getComputedStyle(el).opacity,
-          icon: getComputedStyle(el.querySelector('.design-icon')!)
-            .backgroundColor,
-          mask: getComputedStyle(el.querySelector('.design-icon')!).maskImage,
+          icon: getComputedStyle(el.querySelector('svg')!).color,
         })),
       );
       expect(new Set(colours.map((c) => c.color)).size).toBe(1);
       expect(new Set(colours.map((c) => c.icon)).size).toBe(1);
       expect(colours.every((c) => c.opacity === '1')).toBe(true);
-      expect(
-        await nav
-          .locator('.design-icon')
-          .evaluateAll((els) =>
-            els.every((el) => getComputedStyle(el).maskImage !== 'none'),
-          ),
-      ).toBe(true);
-      await expect(nav.locator('.v-btn--active')).toHaveCount(1);
+      await expect(nav.locator('svg path[d]')).toHaveCount(4);
+      await expect(nav.locator('[aria-current="page"]')).toHaveText('Продажи');
     }
     expect(
       await page.evaluate(
@@ -770,9 +767,21 @@ for (const client of ['supported', 'unsupported', 'throwing'] as const) {
     await expect(
       dialog.getByRole('textbox', { name: 'Ссылка на этикетку · 10 минут' }),
     ).toHaveValue(labelUrl);
-    await dialog
-      .getByRole('button', { name: 'Открыть PDF', exact: true })
-      .click();
+    const openPdf = dialog.getByRole('button', {
+      name: 'Открыть PDF',
+      exact: true,
+    });
+    const copyLink = dialog.getByRole('button', {
+      name: 'Скопировать ссылку',
+      exact: true,
+    });
+    await expect(openPdf).toHaveCSS('background-color', 'rgb(142, 173, 224)');
+    await expect(openPdf).toHaveCSS('color', 'rgb(5, 6, 7)');
+    await expect(copyLink).toHaveCSS('color', 'rgb(142, 173, 224)');
+    await expect(
+      dialog.getByRole('button', { name: 'Закрыть', exact: true }),
+    ).toHaveCSS('color', 'rgb(161, 169, 182)');
+    await openPdf.click();
     if (client === 'supported') {
       expect(
         await page.evaluate(
@@ -787,9 +796,7 @@ for (const client of ['supported', 'unsupported', 'throwing'] as const) {
         ),
       ).toBeVisible();
     }
-    await dialog
-      .getByRole('button', { name: 'Скопировать ссылку', exact: true })
-      .click();
+    await copyLink.click();
     await expect(
       dialog.getByRole('button', { name: 'Ссылка скопирована', exact: true }),
     ).toBeVisible();

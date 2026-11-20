@@ -1,12 +1,24 @@
 <script setup lang="ts">
-import { computed, ref, watch, defineAsyncComponent } from 'vue';
+import { computed, ref, defineAsyncComponent } from 'vue';
 import { useDisplay } from 'vuetify';
 import OrdersView from './components/OrdersView.vue';
 import WarehouseView from './components/WarehouseView.vue';
-import DesignIcon from './components/DesignIcon.vue';
+import {
+  mdiAlertCircleOutline,
+  mdiArrowLeft,
+  mdiArchiveOutline,
+  mdiBarcodeScan,
+  mdiChevronRight,
+  mdiClipboardListOutline,
+  mdiCogOutline,
+  mdiHistory,
+  mdiPackageVariantClosed,
+  mdiTuneVariant,
+  mdiUndoVariant,
+  mdiWarehouse,
+} from '@mdi/js';
 import { useMobileInput } from './composables/useMobileInput';
 import { useTelegramSession } from './composables/useTelegramSession';
-import type { DesignIconName } from './design/icons';
 import { layout } from './design/tokens';
 const MarkingPipelineView = defineAsyncComponent(
   () => import('./components/marking/MarkingPipelineView.vue'),
@@ -16,19 +28,39 @@ const ReturnsView = defineAsyncComponent(
 );
 const { mdAndUp } = useDisplay();
 const mobileInputActive = useMobileInput(mdAndUp);
-const activePage = ref('warehouse');
+type WarehouseSection = 'intake' | 'stock' | 'session';
+type Page =
+  | 'sales'
+  | 'orders'
+  | 'packing'
+  | 'warehouse'
+  | WarehouseSection
+  | 'returns'
+  | 'management'
+  | 'issues'
+  | 'settings';
+type Hub = 'sales' | 'warehouse' | 'management';
+
+const activePage = ref<Page>('warehouse');
+const warehouseSection = ref<WarehouseSection>('intake');
+const warehouseActive = computed(
+  () => activePage.value === warehouseSection.value,
+);
+const markingActive = computed(() =>
+  ['packing', 'issues', 'settings'].includes(activePage.value),
+);
 const returnsOpened = ref(false);
-watch(activePage, (page) => {
-  if (page === 'returns') returnsOpened.value = true;
-});
 const initialOrderId = ref<string | null>(null);
-function navigate(page: string) {
+function navigate(page: Page) {
   initialOrderId.value = null;
+  if (page === 'returns') returnsOpened.value = true;
+  if (page === 'intake' || page === 'stock' || page === 'session')
+    warehouseSection.value = page;
   activePage.value = page;
 }
 function openAvitoOrder(id: string) {
+  navigate('orders');
   initialOrderId.value = id;
-  activePage.value = 'orders';
 }
 const initData = window.Telegram?.WebApp.initData ?? '';
 const session = useTelegramSession(initData);
@@ -60,38 +92,100 @@ const roleNames: Record<string, string> = {
 const owner = computed(() =>
   roles.value.some((r) => ['OWNER', 'ADMIN'].includes(r)),
 );
-const navigation = computed<
-  readonly { label: string; icon: DesignIconName; value: string }[]
->(
-  () =>
-    [
-      { label: 'Заказы', icon: 'orders', value: 'orders' },
-      { label: 'Упаковка', icon: 'warehouseSmall', value: 'packing' },
-      { label: 'Склад', icon: 'warehouse', value: 'warehouse' },
-      { label: 'Возвраты', icon: 'returns', value: 'returns' },
-      { label: 'Проблемы', icon: 'info', value: 'issues' },
-      ...(owner.value
-        ? [{ label: 'Настройки', icon: 'team' as const, value: 'settings' }]
-        : []),
-    ] as const,
+const canReceive = computed(() =>
+  roles.value.some((role) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(role)),
 );
-const moreSections = computed(() =>
-  navigation.value.filter(({ value }) =>
-    ['issues', 'settings'].includes(value),
+
+const navigation = [
+  { label: 'Продажи', icon: mdiClipboardListOutline, value: 'sales' },
+  { label: 'Склад', icon: mdiWarehouse, value: 'warehouse' },
+  { label: 'Возвраты', icon: mdiUndoVariant, value: 'returns' },
+  { label: 'Управление', icon: mdiCogOutline, value: 'management' },
+] as const;
+
+const hubSections = {
+  sales: [
+    {
+      label: 'Заказы',
+      description: 'Заказы Авито и их статусы',
+      icon: mdiClipboardListOutline,
+      page: 'orders',
+    },
+    {
+      label: 'Упаковка',
+      description: 'Сборка и подготовка к отправке',
+      icon: mdiPackageVariantClosed,
+      page: 'packing',
+    },
+  ],
+  warehouse: [
+    {
+      label: 'Приёмка',
+      description: 'Добавление товаров по DataMatrix',
+      icon: mdiBarcodeScan,
+      page: 'intake',
+    },
+    {
+      label: 'Остатки',
+      description: 'Наличие и резервы',
+      icon: mdiArchiveOutline,
+      page: 'stock',
+    },
+    {
+      label: 'Журнал приёмки',
+      description: 'Результаты сканов за сессию',
+      icon: mdiHistory,
+      page: 'session',
+    },
+  ],
+  management: [
+    {
+      label: 'Проблемы',
+      description: 'Ошибки и незавершённые операции',
+      icon: mdiAlertCircleOutline,
+      page: 'issues',
+    },
+    {
+      label: 'Настройки',
+      description: 'Склады, Честный ЗНАК и подписант',
+      icon: mdiTuneVariant,
+      page: 'settings',
+    },
+  ],
+} as const;
+const hubForPage: Partial<Record<Page, Hub>> = {
+  orders: 'sales',
+  packing: 'sales',
+  intake: 'warehouse',
+  stock: 'warehouse',
+  session: 'warehouse',
+  issues: 'management',
+  settings: 'management',
+};
+const parentHub = computed(() => hubForPage[activePage.value]);
+const currentSection = computed(() =>
+  navigation.find(
+    ({ value }) => value === (parentHub.value ?? activePage.value),
   ),
 );
-const mobileNavigation = computed(() => [
-  ...navigation.value.filter(
-    ({ value }) => !['issues', 'settings'].includes(value),
-  ),
-  { label: 'Ещё', icon: 'more' as const, value: 'more' },
-]);
+const currentHub = computed(() => {
+  const page = activePage.value;
+  if (page === 'sales' || page === 'warehouse' || page === 'management')
+    return {
+      title: currentSection.value?.label,
+      sections: hubSections[page].filter(
+        ({ page }) =>
+          (page !== 'settings' || owner.value) &&
+          ((page !== 'intake' && page !== 'session') || canReceive.value),
+      ),
+    };
+  return null;
+});
 const mobilePage = computed({
-  get: () =>
-    ['issues', 'settings'].includes(activePage.value)
-      ? 'more'
-      : activePage.value,
-  set: (page: string) => navigate(page),
+  get: () => currentSection.value?.value,
+  set: (page: (typeof navigation)[number]['value'] | undefined) => {
+    if (page) navigate(page);
+  },
 });
 </script>
 <template>
@@ -102,7 +196,7 @@ const mobilePage = computed({
     <v-navigation-drawer
       v-if="authenticated && stockAllowed && mdAndUp"
       permanent
-      :width="activePage === 'orders' ? 216 : layout.drawerWidth"
+      :width="layout.drawerWidth"
       color="surface"
       border="0"
       class="pa-5"
@@ -119,44 +213,35 @@ const mobilePage = computed({
         bg-color="transparent"
         role="navigation"
         aria-label="Основная навигация"
-        ><v-list-item
+      >
+        <v-list-item
           v-for="item in navigation"
           :key="item.value"
-          :active="item.value === activePage"
-          :disabled="false"
-          :aria-disabled="false"
+          :active="item.value === currentSection?.value"
+          :aria-current="
+            item.value === currentSection?.value ? 'page' : undefined
+          "
           :title="item.label"
-          :subtitle="false ? 'Скоро' : ''"
-          :color="item.value === activePage ? 'primary' : 'secondary'"
+          :prepend-icon="item.icon"
+          :color="
+            item.value === currentSection?.value ? 'primary' : 'secondary'
+          "
           class="mb-2 text-body-medium"
           :class="
-            item.value === activePage
+            item.value === currentSection?.value
               ? 'bg-primary-soft text-primary'
               : 'text-secondary'
           "
           @click="navigate(item.value)"
-          ><template #prepend
-            ><DesignIcon
-              monochrome
-              :name="
-                activePage === 'orders' && item.value === 'orders'
-                  ? 'ordersActive'
-                  : activePage === 'orders' && item.value === 'warehouse'
-                    ? 'warehouseInactive'
-                    : item.icon
-              "
-              class="mr-3" /></template></v-list-item
-      ></v-list>
+        />
+      </v-list>
       <template #append
         ><div class="pb-4">
           <v-sheet color="raised" rounded="md" class="pa-3 mb-5"
             ><p class="text-body-small d-flex align-center ga-2">
               <span class="status-dot bg-success" />Доступ подтверждён
             </p>
-            <p class="text-label-small text-muted mt-1">
-              Смены появятся позже
-            </p></v-sheet
-          >
+          </v-sheet>
           <div class="d-flex align-center ga-3">
             <v-avatar color="primary-soft" rounded="md" size="36"
               ><span class="text-body-small text-primary">{{
@@ -183,10 +268,59 @@ const mobilePage = computed({
             : 'px-6 pt-6 px-md-8 pt-md-8 px-lg-10 pt-lg-10'
         "
       >
+        <v-btn
+          v-if="authenticated && stockAllowed && parentHub"
+          :prepend-icon="mdiArrowLeft"
+          variant="text"
+          color="primary"
+          class="px-2 mb-4"
+          @click="navigate(parentHub)"
+          >К разделу «{{ currentSection?.label }}»</v-btn
+        >
+        <section
+          v-if="authenticated && stockAllowed && currentHub"
+          class="app-section-hub"
+          aria-labelledby="app-section-title"
+        >
+          <h1 id="app-section-title" class="text-title-large mb-5 mb-md-6">
+            {{ currentHub.title }}
+          </h1>
+          <div class="app-section-grid">
+            <v-card
+              v-for="item in currentHub.sections"
+              :key="item.page"
+              tag="button"
+              type="button"
+              border
+              class="app-section-card pa-4 pa-md-5 text-left"
+              :aria-label="item.label"
+              @click="navigate(item.page)"
+            >
+              <span class="d-flex align-center justify-space-between ga-2 mb-4">
+                <v-avatar
+                  rounded="md"
+                  color="primary-soft"
+                  class="text-primary"
+                >
+                  <v-icon :icon="item.icon" size="22" />
+                </v-avatar>
+                <v-icon :icon="mdiChevronRight" color="secondary" size="18" />
+              </span>
+              <span class="d-block text-title-small text-md-title-medium">{{
+                item.label
+              }}</span>
+              <span class="d-block text-body-small text-secondary mt-2">{{
+                item.description
+              }}</span>
+            </v-card>
+          </div>
+        </section>
         <WarehouseView
           v-if="authenticated && stockAllowed"
-          v-show="activePage === 'warehouse'"
-          :active="activePage === 'warehouse'"
+          v-show="warehouseActive"
+          :active="warehouseActive"
+          :section="warehouseSection"
+          @update:section="warehouseActive && navigate($event)"
           :init-data="initData"
           :roles="roles"
         />
@@ -209,37 +343,14 @@ const mobilePage = computed({
           :init-data="initData"
           @open-order="openAvitoOrder"
         />
-        <section
-          v-if="authenticated && stockAllowed && activePage === 'more'"
-          aria-labelledby="more-title"
-        >
-          <h1 id="more-title" class="text-title-large mb-5">Ещё</h1>
-          <div class="more-sections">
-            <v-card
-              v-for="item in moreSections"
-              :key="item.value"
-              border
-              class="pa-4 d-flex flex-column align-start justify-space-between ga-4"
-              min-height="110"
-              link
-              @click="navigate(item.value)"
-            >
-              <v-avatar rounded="md" color="primary-soft" class="text-primary">
-                <DesignIcon :name="item.icon" monochrome />
-              </v-avatar>
-              <span class="text-title-small">{{ item.label }}</span>
-            </v-card>
-          </div>
-        </section>
         <MarkingPipelineView
           v-if="authenticated && stockAllowed"
-          v-show="['packing', 'issues', 'settings'].includes(activePage)"
-          :key="'marking'"
+          v-show="markingActive"
           :init-data="initData"
           :roles="roles"
-          :active="['packing', 'issues', 'settings'].includes(activePage)"
+          :active="markingActive"
           :view="activePage"
-          @navigate="activePage = $event"
+          @navigate="navigate"
         />
         <v-sheet
           v-if="!authenticated || !stockAllowed"
@@ -300,41 +411,48 @@ const mobilePage = computed({
       class="mobile-navigation border"
     >
       <v-btn
-        v-for="item in mobileNavigation"
+        v-for="item in navigation"
         :key="item.value"
         :value="item.value"
-        :disabled="false"
-        :aria-disabled="false"
         :min-width="0"
         height="52"
-        width="65"
+        width="72"
         variant="text"
         color="secondary"
         rounded="md"
         class="px-1 my-3"
         :class="item.value === mobilePage ? 'bg-primary-soft' : ''"
-        :title="item.label"
+        :aria-current="item.value === mobilePage ? 'page' : undefined"
         @click="navigate(item.value)"
-        ><DesignIcon
-          monochrome
-          :name="
-            activePage === 'orders' && item.value === 'orders'
-              ? 'ordersActive'
-              : activePage === 'orders' && item.value === 'warehouse'
-                ? 'warehouseInactive'
-                : item.icon
-          "
-        /><span class="text-label-small mt-1">{{ item.label }}</span></v-btn
       >
+        <v-icon :icon="item.icon" size="20" />
+        <span class="text-label-small mt-1">{{ item.label }}</span>
+      </v-btn>
     </v-bottom-navigation>
   </v-app>
 </template>
 
 <style scoped>
-.more-sections {
+.app-section-hub {
+  max-width: 760px;
+}
+.app-section-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  max-width: 560px;
+}
+.app-section-card {
+  min-height: 136px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+@media (min-width: 960px) {
+  .app-section-grid {
+    gap: 16px;
+  }
+  .app-section-card {
+    min-height: 148px;
+  }
 }
 </style>

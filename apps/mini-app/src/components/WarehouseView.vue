@@ -22,7 +22,9 @@ const { mdAndUp } = useDisplay();
 const canReceive = computed(() =>
   props.roles.some((role) => ['OWNER', 'ADMIN', 'WAREHOUSE'].includes(role)),
 );
-const activeTab = ref(canReceive.value ? 'intake' : 'stock');
+const activeTab = defineModel<'intake' | 'stock' | 'session'>('section', {
+  required: true,
+});
 const {
   stock,
   search,
@@ -126,7 +128,13 @@ watch(cameraOpen, (value) => {
     >
       <div>
         <p class="text-label-small text-primary mb-1 d-md-none">SHTANISHKIN</p>
-        <h1 id="warehouse-title" class="text-title-large">Склад</h1>
+        <h1 id="warehouse-title" class="text-title-large">
+          {{
+            { intake: 'Приёмка', stock: 'Остатки', session: 'Журнал приёмки' }[
+              activeTab
+            ]
+          }}
+        </h1>
         <p class="d-none d-md-block text-body-medium text-secondary mt-1">
           {{
             activeTab === 'stock'
@@ -156,7 +164,7 @@ watch(cameraOpen, (value) => {
       color="surface"
       rounded="md"
       class="pa-1 mb-4 mb-md-5"
-      :max-width="mdAndUp ? 400 : undefined"
+      :max-width="mdAndUp ? 440 : undefined"
     >
       <v-tabs
         v-model="activeTab"
@@ -174,7 +182,7 @@ watch(cameraOpen, (value) => {
           v-if="canReceive"
           value="session"
           :class="{ 'bg-raised': activeTab === 'session' }"
-          >Эта сессия</v-tab
+          >Журнал приёмки</v-tab
         ></v-tabs
       >
     </v-sheet>

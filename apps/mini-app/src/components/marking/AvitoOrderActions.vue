@@ -350,11 +350,15 @@ const status = (s: string) =>
         labelError
       }}</v-alert>
       <div class="d-flex flex-wrap ga-2">
-        <v-btn color="primary-strong" @click="openLabel">Открыть PDF</v-btn>
-        <v-btn variant="outlined" @click="copyLabel">{{
+        <v-btn color="primary" variant="flat" @click="openLabel"
+          >Открыть PDF</v-btn
+        >
+        <v-btn color="primary" variant="outlined" @click="copyLabel">{{
           labelCopied ? 'Ссылка скопирована' : 'Скопировать ссылку'
         }}</v-btn>
-        <v-btn variant="text" @click="labelUrl = ''">Закрыть</v-btn>
+        <v-btn color="secondary" variant="text" @click="labelUrl = ''"
+          >Закрыть</v-btn
+        >
       </div>
     </v-card>
   </v-dialog>

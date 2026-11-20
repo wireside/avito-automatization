@@ -1,3 +1,4 @@
+import type { AvitoFetch, AvitoResponse } from './avito-transport.js';
 import { z } from 'zod';
 import {
   ProviderError,
@@ -10,7 +11,7 @@ export function createAvitoMarkingSender(options: {
   writesEnabled: boolean;
   acquireSlot?: () => Promise<boolean>;
   readOrder?: (id: string) => Promise<MarketplaceOrder>;
-  fetch?: typeof fetch;
+  fetch?: AvitoFetch;
 }) {
   const fetcher = options.fetch ?? fetch;
   let token: string | undefined,
@@ -18,7 +19,7 @@ export function createAvitoMarkingSender(options: {
     cooldownUntil = 0;
   async function getToken() {
     if (token && expiresAt > Date.now()) return token;
-    let r: Response;
+    let r: AvitoResponse;
     try {
       r = await fetcher('https://api.avito.ru/token', {
         method: 'POST',
@@ -96,7 +97,7 @@ export function createAvitoMarkingSender(options: {
       )
         throw new ProviderError('AVITO_RATE_LIMITED', true);
       const access = await getToken();
-      let r: Response;
+      let r: AvitoResponse;
       try {
         r = await fetcher('https://api.avito.ru/order-management/1/markings', {
           method: 'POST',

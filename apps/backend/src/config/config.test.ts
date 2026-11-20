@@ -137,3 +137,39 @@ describe('CHZ proxy configuration', () => {
     ).toThrow();
   });
 });
+
+describe('Avito proxy configuration', () => {
+  it('is disabled by default and separate from the CHZ proxy', () => {
+    expect(readConfig(base).AVITO_PROXY_ENABLED).toBe(false);
+    expect(
+      readConfig({
+        ...base,
+        CHZ_PROXY_ENABLED: 'true',
+        CHZ_PROXY_URL: 'http://chz-proxy.example:3128',
+      }).AVITO_PROXY_ENABLED,
+    ).toBe(false);
+    expect(
+      readConfig({
+        ...base,
+        AVITO_PROXY_ENABLED: 'true',
+        AVITO_PROXY_URL: 'https://avito-proxy.example:3128',
+      }),
+    ).toMatchObject({
+      AVITO_PROXY_ENABLED: true,
+      AVITO_PROXY_URL: 'https://avito-proxy.example:3128',
+      CHZ_PROXY_ENABLED: false,
+    });
+  });
+  it('requires a valid explicit proxy URL when enabled', () => {
+    expect(() => readConfig({ ...base, AVITO_PROXY_ENABLED: 'true' })).toThrow(
+      'AVITO_PROXY_ENABLED requires AVITO_PROXY_URL',
+    );
+    expect(() =>
+      readConfig({
+        ...base,
+        AVITO_PROXY_ENABLED: 'true',
+        AVITO_PROXY_URL: 'http://user:secret@proxy.example:3128',
+      }),
+    ).toThrow();
+  });
+});

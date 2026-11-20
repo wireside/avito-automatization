@@ -1,3 +1,4 @@
+import { createAvitoTransport } from '../infrastructure/avito-transport.js';
 import {
   createWarehouseSettingsStore,
   createChzSessionStore,
@@ -46,14 +47,21 @@ import { buildApp } from '../http/app.js';
 import { createTelegramBot } from '../telegram/index.js';
 
 export async function createApiRuntime(config: AppConfig) {
+  const avitoTransport = createAvitoTransport(
+    config.AVITO_PROXY_ENABLED ? config.AVITO_PROXY_URL : undefined,
+  );
+  const avitoConnection = {
+    clientId: config.AVITO_API_CLIENT_ID,
+    clientSecret: config.AVITO_API_CLIENT_SECRET,
+    fetch: avitoTransport.fetch,
+  };
   const database = createDatabaseClient(config.DATABASE_URL);
   const redis = createRedisConnection(config.REDIS_URL);
   const users = createUserAccessStore(database);
   const inventory = createInventoryStore(database.db);
   const orderReader = createAvitoOrderReader({
     includePhotos: false,
-    clientId: config.AVITO_API_CLIENT_ID,
-    clientSecret: config.AVITO_API_CLIENT_SECRET,
+    ...avitoConnection,
     acquireReadSlot: createAvitoReadLimiter(
       redis,
       config.AVITO_API_CLIENT_ID ?? 'unconfigured',
@@ -234,8 +242,7 @@ export async function createApiRuntime(config: AppConfig) {
       ),
       writesEnabled: config.AVITO_WRITES_ENABLED,
       provider: createAvitoActionProvider({
-        clientId: config.AVITO_API_CLIENT_ID,
-        clientSecret: config.AVITO_API_CLIENT_SECRET,
+        ...avitoConnection,
         writesEnabled: config.AVITO_WRITES_ENABLED,
         acquireSlot: createAvitoReadLimiter(
           redis,
@@ -245,8 +252,7 @@ export async function createApiRuntime(config: AppConfig) {
     }),
     readOrders: createReadOrders(
       createAvitoOrderReader({
-        clientId: config.AVITO_API_CLIENT_ID,
-        clientSecret: config.AVITO_API_CLIENT_SECRET,
+        ...avitoConnection,
         acquireReadSlot: createAvitoReadLimiter(
           redis,
           config.AVITO_API_CLIENT_ID ?? 'unconfigured',
@@ -311,6 +317,7 @@ export async function createApiRuntime(config: AppConfig) {
           database.pool.end(),
           redis.quit(),
           placesClient.close(),
+          avitoTransport.close(),
         ]);
       })();
       return closing;

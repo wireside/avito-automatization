@@ -1,3 +1,4 @@
+import type { AvitoFetch, AvitoResponse } from './avito-transport.js';
 import { z } from 'zod';
 import { courierOptionsSchema } from '@avito/contracts';
 import {
@@ -10,7 +11,7 @@ export function createAvitoActionProvider(options: {
   clientId?: string | undefined;
   clientSecret?: string | undefined;
   writesEnabled: boolean;
-  fetch?: typeof fetch;
+  fetch?: AvitoFetch;
   acquireSlot?: () => Promise<boolean>;
 }): AvitoActionProvider {
   const fetcher = options.fetch ?? fetch;
@@ -22,7 +23,7 @@ export function createAvitoActionProvider(options: {
       throw new ProviderError('AVITO_NOT_CONFIGURED');
     if (token && token.until > Date.now()) return token.value;
     pendingToken ??= (async () => {
-      let r: Response;
+      let r: AvitoResponse;
       try {
         r = await fetcher('https://api.avito.ru/token', {
           method: 'POST',
@@ -86,7 +87,7 @@ export function createAvitoActionProvider(options: {
     for (let attempt = 0; attempt < 2; attempt++) {
       const access = await credentials();
       if (attempt === 0) await beforeSend?.();
-      let r: Response;
+      let r: AvitoResponse;
       try {
         r = await fetcher('https://api.avito.ru' + path, {
           method: body === undefined ? 'GET' : 'POST',
@@ -149,7 +150,7 @@ export function createAvitoActionProvider(options: {
     }
     throw new ProviderError('AVITO_ACCESS_DENIED');
   }
-  async function json(r: Response, mutation: boolean) {
+  async function json(r: AvitoResponse, mutation: boolean) {
     try {
       return await r.json();
     } catch {

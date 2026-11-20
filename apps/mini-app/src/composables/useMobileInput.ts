@@ -26,9 +26,13 @@ export function useMobileInput(mdAndUp: Ref<boolean>) {
       : window.innerHeight;
   let restingHeight = viewportHeight();
   let layoutWidth = window.innerWidth;
+  let editingPointer: number | null = null;
+  let focusFrame = 0;
 
   function updateFocus() {
     const next = Boolean(focusedInput());
+    // Keep the bottom bar from covering the tapped control before its click.
+    if (!next && editingPointer !== null) return;
     if (!keyboardOpen.value && !next) restingHeight = viewportHeight();
     editing.value = next;
   }
@@ -83,11 +87,38 @@ export function useMobileInput(mdAndUp: Ref<boolean>) {
     }
   }
 
+  function onPointerDown(event: PointerEvent) {
+    if (
+      !mdAndUp.value &&
+      event.isPrimary &&
+      event.button === 0 &&
+      focusedInput()
+    ) {
+      window.cancelAnimationFrame(focusFrame);
+      editingPointer = event.pointerId;
+    }
+  }
+
+  function finishPointer(event: PointerEvent) {
+    if (event.pointerId !== editingPointer) return;
+    focusFrame = window.requestAnimationFrame(() => {
+      editingPointer = null;
+      updateFocus();
+    });
+  }
+
+  function onPointerUp(event: PointerEvent) {
+    dismissOnOutsideTap(event);
+    finishPointer(event);
+  }
+
   onMounted(() => {
     updateFocus();
     document.addEventListener('focusin', updateFocus);
     document.addEventListener('focusout', onFocusOut);
-    document.addEventListener('pointerup', dismissOnOutsideTap, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('pointerup', onPointerUp, true);
+    document.addEventListener('pointercancel', finishPointer, true);
     window.addEventListener('resize', onResize);
     viewport?.addEventListener('resize', onResize);
   });
@@ -95,7 +126,10 @@ export function useMobileInput(mdAndUp: Ref<boolean>) {
   onUnmounted(() => {
     document.removeEventListener('focusin', updateFocus);
     document.removeEventListener('focusout', onFocusOut);
-    document.removeEventListener('pointerup', dismissOnOutsideTap, true);
+    document.removeEventListener('pointerdown', onPointerDown, true);
+    document.removeEventListener('pointerup', onPointerUp, true);
+    document.removeEventListener('pointercancel', finishPointer, true);
+    window.cancelAnimationFrame(focusFrame);
     window.removeEventListener('resize', onResize);
     viewport?.removeEventListener('resize', onResize);
   });

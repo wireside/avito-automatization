@@ -1,3 +1,4 @@
+import type { AvitoFetch, AvitoResponse } from './avito-transport.js';
 import { z } from 'zod';
 import type {
   MarketplaceOrder,
@@ -101,7 +102,7 @@ export function createAvitoOrderReader(options: {
   includePhotos?: boolean;
   clientId: string | undefined;
   clientSecret: string | undefined;
-  fetch?: typeof fetch;
+  fetch?: AvitoFetch;
   acquireReadSlot?: () => Promise<boolean>;
 }): OrderReader {
   const request = options.fetch ?? fetch;
@@ -109,7 +110,7 @@ export function createAvitoOrderReader(options: {
   let pendingToken: Promise<string> | undefined;
   let cooldownUntil = 0;
   let nextReadAt = 0;
-  function rateLimited(response: Response): never {
+  function rateLimited(response: AvitoResponse): never {
     const retry = response.headers.get('retry-after');
     const seconds = retry && /^\d+$/.test(retry) ? Number(retry) : null;
     const delay =

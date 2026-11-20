@@ -205,12 +205,13 @@ async function setup(
   await page.goto('/');
   const mobile = (page.viewportSize()?.width ?? 1280) < 960;
   if (mobile)
-    await page.getByRole('button', { name: 'Упаковка', exact: true }).click();
+    await page.getByRole('button', { name: 'Продажи', exact: true }).click();
   else
     await page
       .getByRole('navigation', { name: 'Основная навигация' })
-      .getByText('Упаковка', { exact: true })
+      .getByText('Продажи', { exact: true })
       .click();
+  await page.getByRole('button', { name: 'Упаковка', exact: true }).click();
   await page.getByRole('button', { name: 'Открыть посылку DEMO-1042' }).click();
   return requests;
 }
@@ -368,8 +369,9 @@ test('settings separate CHZ connection from warehouses and hide internal fields'
   await setup(page);
   await page
     .getByRole('navigation', { name: 'Основная навигация' })
-    .getByText('Настройки', { exact: true })
+    .getByText('Управление', { exact: true })
     .click();
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click();
   await expect(
     page.getByText('Подключение Честного знака', { exact: true }),
   ).toBeVisible();
@@ -467,7 +469,7 @@ test('legal details are loaded only after expanding a unit', async ({
     .getByRole('navigation', { name: 'Основная навигация' })
     .getByText('Склад', { exact: true })
     .click();
-  await page.getByRole('tab', { name: 'Остатки', exact: true }).click();
+  await page.getByRole('button', { name: 'Остатки', exact: true }).click();
   // Refresh the existing warehouse query, without touching the marking endpoint.
   await page
     .getByRole('button', { name: 'Обновить склад', exact: true })
@@ -530,8 +532,9 @@ for (const client of ['native', 'missing', 'throws'] as const)
     page.on('popup', (popup) => popups.push(popup));
     await page
       .getByRole('navigation', { name: 'Основная навигация' })
-      .getByText('Настройки', { exact: true })
+      .getByText('Управление', { exact: true })
       .click();
+    await page.getByRole('button', { name: 'Настройки', exact: true }).click();
     await page
       .getByRole('button', { name: 'Подключить Windows', exact: true })
       .click();
@@ -679,8 +682,8 @@ test('returns page records a scan and waits for CHZ to confirm availability', as
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await page.getByRole('button', { name: 'Ещё', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Ещё' })).toBeVisible();
+  await page.getByRole('button', { name: 'Управление', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Управление' })).toBeVisible();
   await expect(page.getByText('Проблемы', { exact: true })).toBeVisible();
   await expect(page.getByText('Настройки', { exact: true })).toBeVisible();
 });

@@ -25,12 +25,24 @@ test('shows modules after server verification', async ({ page }) => {
   );
   await page.goto('/');
   await expect(page.getByText('Доступ подтверждён')).toBeVisible();
+  const nav = page.getByRole('navigation', { name: 'Основная навигация' });
+  await expect(nav.locator('.v-list-item')).toHaveCount(4);
   await expect(
-    page
-      .getByRole('navigation', { name: 'Основная навигация' })
-      .locator('.v-list-item')
-      .filter({ hasText: 'Заказы' }),
-  ).toHaveAttribute('aria-disabled', 'false');
+    page.getByRole('button', { name: 'Приёмка', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Остатки', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Журнал приёмки', exact: true }),
+  ).toBeVisible();
+  await nav.getByText('Продажи', { exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Заказы', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Упаковка', exact: true }),
+  ).toBeVisible();
 });
 
 test('explains missing access and hides modules', async ({ page }) => {

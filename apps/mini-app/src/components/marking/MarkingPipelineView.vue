@@ -25,7 +25,7 @@ const props = defineProps<{
   active: boolean;
   view: string;
 }>();
-const emit = defineEmits<{ navigate: [view: string] }>();
+const emit = defineEmits<{ navigate: [view: 'packing'] }>();
 const api = createMarkingApi(props.initData);
 const issueCommand = useMarkingCommand(props.initData);
 const locked = ref(false);

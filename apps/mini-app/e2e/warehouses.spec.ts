@@ -149,6 +149,7 @@ async function setup(
     return r.fulfill({ json: { data: [] } });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Приёмка', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Выбрать склад' }),
   ).toBeVisible();
@@ -275,8 +276,9 @@ test('saves the CHZ INN before requiring a warehouse address', async ({
   const state = await setup(page, { unconnected: true });
   await page
     .getByRole('navigation', { name: 'Основная навигация' })
-    .getByText('Настройки', { exact: true })
+    .getByText('Управление', { exact: true })
     .click();
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click();
   await page
     .getByLabel('ИНН ИП · 12 цифр', { exact: true })
     .fill('123456789012');
